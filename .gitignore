@@ -1,0 +1,41 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments & package manager directories
+.venv/
+env/
+venv/
+ENV/
+.uv/
+
+# Environment configurations and credentials (CRITICAL)
+.env
+*.env
+.secrets/
+credentials.json
+
+# Dynamic pipeline folders (Input raw data and output editions)
+input/
+output/
+
+# Planning, research and improvement notebooks (Optional repository exclusions)
+IMPROVEMENT_PLAN.md
+
+# IDE & Editor specific configurations
+.vscode/
+.idea/
+*.swp
+*.swo
+.agents/
+
+# System-specific files
+.DS_Store
+Thumbs.db
+desktop.ini

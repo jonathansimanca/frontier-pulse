@@ -1,0 +1,20 @@
+[project]
+name = "frontier-pulse"
+version = "0.1.0"
+description = "Personal technology watch agent that automatically researches weekly AI developments and generates podcast episodes delivered to Telegram."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "google-genai>=0.1.1",
+    "google-cloud-texttospeech>=2.16.0",
+    "python-dotenv>=1.0.1",
+    "pydantic>=2.0.0",
+    "requests>=2.31.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
