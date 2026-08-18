@@ -75,6 +75,9 @@ def test_manifest_stage_transitions():
 @patch("src.telegram_publisher.requests.post")
 @patch("src.telegram_publisher.TELEGRAM_BOT_TOKEN", "mock-token")
 @patch("src.telegram_publisher.TELEGRAM_CHAT_ID", "mock-chat")
+@patch("src.telegram_publisher.TELEGRAM_ENABLED", True)
+@patch("src.telegram_publisher.TELEGRAM_STRICT", True)
+@patch("src.telegram_publisher.TELEGRAM_RETRIES", 1)
 def test_idempotent_telegram_delivery(mock_post, tmp_path):
     """Verify that Telegram publishing is fully idempotent and can resume/retry partially failed sends."""
     # Mock responses for text sendMessage and audio sendAudio
@@ -135,6 +138,9 @@ def test_idempotent_telegram_delivery(mock_post, tmp_path):
 @patch("src.telegram_publisher.requests.post")
 @patch("src.telegram_publisher.TELEGRAM_BOT_TOKEN", "mock-token")
 @patch("src.telegram_publisher.TELEGRAM_CHAT_ID", "mock-chat")
+@patch("src.telegram_publisher.TELEGRAM_ENABLED", True)
+@patch("src.telegram_publisher.TELEGRAM_STRICT", True)
+@patch("src.telegram_publisher.TELEGRAM_RETRIES", 1)
 def test_partial_telegram_delivery_failure_and_resume(mock_post, tmp_path):
     """Verify that if text succeeds but audio fails, a retry only sends the missing audio component."""
     # Mock responses: text sendMessage succeeds, audio sendAudio fails
@@ -243,7 +249,7 @@ def test_telegram_formatting_and_escaping():
     msg = format_telegram_message(news_data)
 
     # Core message structure should remain intact
-    assert "🎙 *Frontier Pulse* — Edición 2026-08-03" in msg
+    assert "🎙 *Frontier Pulse* — Edition 2026-08-03" in msg
     # Injected news title, category, and takeaways should be escaped to prevent Telegram parse errors
     assert "Claude\\_3.5\\_Opus \\*Leaked\\*" in msg
     assert "🏷 _Models\\_Update_" in msg

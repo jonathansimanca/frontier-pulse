@@ -32,7 +32,7 @@ class NewsItem(BaseModel):
         description="Detailed, factual 2-3 sentence summary of the breakthrough, technical details and its immediate implications."
     )
     why_it_matters: str = Field(
-        description="Clear explanation of why this development is highly relevant to Jonathan's priority areas."
+        description="Clear explanation of why this development is highly relevant to frontier AI technology watch."
     )
     key_takeaways: List[str] = Field(
         min_length=1,
@@ -47,7 +47,7 @@ class NewsItem(BaseModel):
         None,
         ge=1,
         le=5,
-        description="Relevance score to Jonathan's priority areas (1 to 5)"
+        description="Relevance score to frontier AI priority areas (1 to 5)"
     )
     evidence_score: Optional[int] = Field(
         None,
@@ -73,7 +73,7 @@ class Edition(BaseModel):
         description="The end timestamp of the research window (e.g. YYYY-MM-DDTHH:MM:SS-05:00)"
     )
     title: str = Field(
-        description="The title of this edition, e.g., 'Frontier Pulse - Edición YYYY-MM-DD'"
+        description="The title of this edition, e.g., 'Frontier Pulse - Edition YYYY-MM-DD: Key Highlights'"
     )
     is_slow_week: bool = Field(
         description="Set to true if there are fewer than 2 major new announcements this week, otherwise false"
@@ -102,8 +102,8 @@ class DiscoveryEdition(BaseModel):
     )
     items: List[NewsItem] = Field(
         min_length=1,
-        max_length=15,
-        description="The pool of candidates discovered during research"
+        max_length=35,
+        description="The pool of candidates discovered across all research tracks"
     )
 
 class DeliveryState(BaseModel):
@@ -117,7 +117,7 @@ class DeliveryState(BaseModel):
 class EditionManifest(BaseModel):
     edition_id: str = Field(description="Format: YYYY-MM-DD")
     edition_date: str = Field(description="Format: YYYY-MM-DD")
-    status: str = Field(default="created", description="Enum: created, researched, scripted, audio_ready, delivered, failed")
+    status: str = Field(default="created", description="Enum: created, researched, scripted, audio_ready, delivered, completed, failed")
     last_successful_stage: Optional[str] = None
     failed_stage: Optional[str] = None
     error_message: Optional[str] = None

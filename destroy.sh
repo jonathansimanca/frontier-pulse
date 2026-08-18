@@ -20,11 +20,11 @@ set -eo pipefail
 PROJECT_ID=$1
 if [ -z "$PROJECT_ID" ]; then
     echo -e "\n[!] Error: Please provide your GCP Project ID."
-    echo -e "Usage:\n  ./destroy.sh <GCP_PROJECT_ID>\n"
+    echo -e "Usage:\n  ./destroy.sh <GCP_PROJECT_ID> [REGION]\n"
     exit 1
 fi
 
-REGION="us-central1"
+REGION="${2:-us-central1}"
 FUNCTION_NAME="frontier-pulse-weekly"
 BUCKET_NAME="frontier-pulse-data-${PROJECT_ID}"
 SCHEDULER_JOB_NAME="frontier-pulse-trigger"

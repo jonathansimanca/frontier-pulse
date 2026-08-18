@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.ia_news_researcher import research_ai_news
+from src.quality_gate import validate_edition_quality
 from src.script_generator import generate_podcast_script
 from src.audio_generator import load_spanish_script, synthesize_speech
 from src.image_generator import generate_podcast_cover
@@ -12,8 +13,7 @@ from src.telegram_publisher import publish_to_telegram
 from src.config import (
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
-    OUTPUT_DIR,
-    INPUT_DIR,
+    TELEGRAM_ENABLED,
     get_edition_dir,
 )
 from src.manifest_manager import (
@@ -32,17 +32,18 @@ def run_pipeline():
     # Step 0: Load manifest and perform startup validation
     edition_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     manifest = create_or_load_manifest(edition_date)
+    skip_telegram = "--skip-telegram" in sys.argv or not TELEGRAM_ENABLED
 
-    # Startup validation: missing required delivery credentials fails the production run
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+    # Startup validation: missing required delivery credentials fails production run ONLY when Telegram is enabled
+    if not skip_telegram and (not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID):
         err_msg = "Telegram credentials (TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID) are missing. Failing startup validation."
         print(f"\n[!] STARTUP VALIDATION ERROR: {err_msg}")
         update_manifest_stage(manifest, "failed", error=err_msg)
         sys.exit(1)
 
     # Idempotent skip: if already delivered, exit successfully
-    if manifest.status == "delivered":
-        print(f"\n[+] Edition {edition_date} already successfully delivered. skipping execution (idempotent).")
+    if manifest.status in ["delivered", "completed"]:
+        print(f"\n[+] Edition {edition_date} already successfully processed/delivered. Skipping execution (idempotent).")
         print("=" * 65)
         sys.exit(0)
 
@@ -73,7 +74,6 @@ def run_pipeline():
 
         # Step 1.5: Editorial Quality Gate Validation
         print("\n--- STEP 1.5: Editorial Quality Gate (Quality Control) ---")
-        from src.quality_gate import validate_edition_quality
         quality_report = validate_edition_quality(news_data)
         
         # Save quality report in artifacts
@@ -90,7 +90,7 @@ def run_pipeline():
             update_manifest_stage(
                 manifest,
                 "failed",
-                error_message="Editorial quality gate failed: " + "; ".join(quality_report.reasons_for_failure)
+                error="Editorial quality gate failed: " + "; ".join(quality_report.reasons_for_failure)
             )
             # Prevent automatic generation by raising an error
             raise ValueError("Editorial quality gate failed. Correct current_news.json selection or candidates and try again.")
@@ -157,7 +157,12 @@ def run_pipeline():
 
         # Step 4: Publish to Telegram (Idempotent delivery)
         print("\n--- STEP 4: Publishing Episode to Telegram ---")
-        published = publish_to_telegram(manifest)
+        if skip_telegram:
+            print("[*] Telegram delivery skipped for local test validation / firewall bypass.")
+            update_manifest_stage(manifest, "completed")
+            published = False
+        else:
+            published = publish_to_telegram(manifest)
 
         print("\n" + "=" * 65)
         print("   EPISODE GENERATION COMPLETE!")
@@ -165,7 +170,8 @@ def run_pipeline():
         print(f"   Spanish Script:    {es_script_path}")
         print(f"   English Script:    {en_script_path}")
         print(f"   Audio MP3:        {audio_path}")
-        print(f"   Telegram Delivery: {'Delivered' if published else 'Skipped/Pending'}")
+        print(f"   Cover Image:       {manifest.artifacts.get('cover_image', 'None')}")
+        print(f"   Telegram Delivery: {'Delivered' if published else ('Skipped (Local Test)' if skip_telegram else 'Failed/Pending')}")
         print("=" * 65)
 
     except BaseException as e:

@@ -1,5 +1,4 @@
 import os
-import sys
 from pathlib import Path
 from google.cloud import storage
 
@@ -27,7 +26,6 @@ def download_from_gcs():
 
     print(f"[*] GCS sync: Synchronizing files from bucket '{GCS_BUCKET_NAME}' to local storage...")
     try:
-        bucket = client.bucket(GCS_BUCKET_NAME)
         
         # Download input/ folder
         blobs_input = client.list_blobs(GCS_BUCKET_NAME, prefix="input/")

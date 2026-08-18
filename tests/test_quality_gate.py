@@ -152,3 +152,23 @@ def test_quality_gate_slow_week_adjustment(base_valid_edition):
     assert report_slow.passed is True
     checks_dict_slow = {c.check_name: c.passed for c in report_slow.checks}
     assert checks_dict_slow["slow_week_adjustment"] is True
+
+
+def test_quality_gate_failed_blocked_domain(base_valid_edition):
+    """Verify that an edition fails if it contains sources from blocked/unreliable domains."""
+    base_valid_edition["items"][0]["sources"][0]["url"] = "https://www.facebook.com/story.php?id=12345"
+    report = validate_edition_quality(base_valid_edition)
+    assert report.passed is False
+    assert any("Domain Quality" in reason for reason in report.reasons_for_failure)
+    checks_dict = {c.check_name: c.passed for c in report.checks}
+    assert checks_dict["evidence_grounding"] is False
+
+
+def test_quality_gate_failed_platform_duplication(base_valid_edition):
+    """Verify that an edition fails if multiple stories rely on the same low-quality domain."""
+    base_valid_edition["items"][0]["sources"][0]["url"] = "https://capitalbench.com/report1"
+    base_valid_edition["items"][1]["sources"][0]["url"] = "https://capitalbench.com/report2"
+    report = validate_edition_quality(base_valid_edition)
+    assert report.passed is False
+    checks_dict = {c.check_name: c.passed for c in report.checks}
+    assert checks_dict["evidence_grounding"] is False or checks_dict["topic_diversity"] is False

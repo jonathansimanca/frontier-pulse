@@ -1,5 +1,4 @@
-import json
-import os
+import re
 import sys
 from pathlib import Path
 from google.cloud import texttospeech
@@ -24,13 +23,42 @@ def load_spanish_script(script_path: Path = None) -> str:
         return f.read().strip()
 
 
+def split_text_into_chunks(text: str, max_bytes: int = 4000) -> list[str]:
+    """Split text into natural sentence-level chunks each under max_bytes to respect Google Cloud TTS 5000-byte limit."""
+    if len(text.encode("utf-8")) <= max_bytes:
+        return [text]
+
+    sentences = re.split(r'(?<=[.!?\n])\s+', text)
+    chunks = []
+    current_chunk = []
+    current_bytes = 0
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        sentence_bytes = len(sentence.encode("utf-8")) + 1
+        if current_bytes + sentence_bytes > max_bytes and current_chunk:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = [sentence]
+            current_bytes = sentence_bytes
+        else:
+            current_chunk.append(sentence)
+            current_bytes += sentence_bytes
+
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+
+    return chunks
+
+
 def synthesize_speech(
     text: str,
     output_audio_path: Path = None,
     language_code: str = PODCAST_LANGUAGE_ES,
     voice_name: str = PODCAST_VOICE_NAME
 ) -> Path:
-    """Synthesize speech audio from text using Google Cloud Text-to-Speech API with Latin American Spanish voice."""
+    """Synthesize speech audio from text using Google Cloud Text-to-Speech API with automatic chunking for long text."""
     if output_audio_path is None:
         output_audio_path = OUTPUT_DIR / "frontier_pulse_episode.mp3"
 
@@ -45,14 +73,14 @@ def synthesize_speech(
         print("   gcloud auth application-default login\n")
         sys.exit(1)
 
-    # Configure input text
-    synthesis_input = texttospeech.SynthesisInput(text=text)
+    # Split text into chunks below TTS 5,000-byte request limit
+    chunks = split_text_into_chunks(text, max_bytes=4000)
+    print(f"[*] Synthesizing audio with Latin American Spanish voice '{voice_name}' ({len(chunks)} chunk{'s' if len(chunks) > 1 else ''})...")
 
     # Configure Latin American Spanish voice
     voice = texttospeech.VoiceSelectionParams(
         language_code=language_code,
         name=voice_name,
-        ssml_gender=texttospeech.SsmlVoiceGender.MALE
     )
 
     # Configure output audio encoding (MP3)
@@ -62,19 +90,24 @@ def synthesize_speech(
         pitch=0.0
     )
 
-    print(f"[*] Synthesizing audio with Latin American Spanish voice '{voice_name}'...")
-    response = client.synthesize_speech(
-        input=synthesis_input,
-        voice=voice,
-        audio_config=audio_config
-    )
+    combined_audio = bytearray()
+    for idx, chunk in enumerate(chunks, 1):
+        if len(chunks) > 1:
+            print(f"    -> Synthesizing chunk {idx}/{len(chunks)} ({len(chunk.encode('utf-8'))} bytes)...")
+        synthesis_input = texttospeech.SynthesisInput(text=chunk)
+        response = client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+        combined_audio.extend(response.audio_content)
 
     # Save output audio file
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    output_audio_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_audio_path, "wb") as out:
-        out.write(response.audio_content)
+        out.write(combined_audio)
 
-    print(f"[+] Audio generated successfully.")
+    print(f"[+] Audio generated successfully ({len(combined_audio)} bytes).")
     print(f"[+] Saved to: {output_audio_path}")
 
     return output_audio_path

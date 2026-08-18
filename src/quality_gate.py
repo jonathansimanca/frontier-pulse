@@ -1,8 +1,21 @@
 import json
-from datetime import datetime, timezone
 from pathlib import Path
-from src.schemas import EditorialQualityReport, QualityCheckResult, Edition
-from src.config import OUTPUT_DIR, PRIORITY_TOPICS, get_edition_dir
+from urllib.parse import urlparse
+from src.schemas import EditorialQualityReport, QualityCheckResult
+from src.config import BLOCKED_DOMAINS, get_edition_dir
+from src.ia_news_researcher import calculate_edition_window
+
+
+def extract_domain(url: str) -> str:
+    """Extract clean domain name from URL (e.g. 'https://blog.google/news' -> 'blog.google')."""
+    try:
+        parsed = urlparse(url)
+        netloc = parsed.netloc.lower()
+        if netloc.startswith("www."):
+            netloc = netloc[4:]
+        return netloc
+    except Exception:
+        return ""
 
 
 def validate_edition_quality(edition_dict: dict) -> EditorialQualityReport:
@@ -10,9 +23,9 @@ def validate_edition_quality(edition_dict: dict) -> EditorialQualityReport:
     
     Checks:
     - Temporal Alignment: Sources are within the start_date and end_date window boundaries.
-    - Evidence Grounding: Every story has valid source URLs.
-    - Topic Diversity: The edition is not dominated by a single project/announcement.
-    - Relevance / Quality: Average relevance and evidence scores meet acceptable thresholds.
+    - Evidence Grounding & Domain Quality: Every story has valid canonical source URLs and no blocked spam domains.
+    - Topic Diversity & Platform Duplication: The edition is not dominated by a single company or single tracker.
+    - Editorial Quality Scoring: Average relevance and evidence scores meet acceptable thresholds.
     - Slow Week Adjustment: Allow fewer than 3 items only if is_slow_week is explicitly declared.
     """
     edition_date = edition_dict.get("edition_date", "unknown")
@@ -26,7 +39,6 @@ def validate_edition_quality(edition_dict: dict) -> EditorialQualityReport:
 
     # Calculate fallback dates if missing in the edition dict
     if not start_date_str or not end_date_str:
-        from src.ia_news_researcher import calculate_edition_window
         try:
             start_date_str, end_date_str = calculate_edition_window(edition_date)
         except Exception:
@@ -45,12 +57,10 @@ def validate_edition_quality(edition_dict: dict) -> EditorialQualityReport:
             for src in item.get("sources", []):
                 pub_date = src.get("published_date")
                 if pub_date:
-                    # Simple date string comparison (YYYY-MM-DD)
                     if not (start_day <= pub_date <= end_day):
                         out_of_bounds_count += 1
                         
         if out_of_bounds_count > 0:
-            # We warn but don't hard-fail if there are minor date discrepancies, but if more than half are out-of-bounds, it's a fail
             if out_of_bounds_count > len(items) / 2:
                 temporal_passed = False
                 temp_msg = f"Temporal Alignment Failed: {out_of_bounds_count} sources are outside the coverage window ({start_day} to {end_day})."
@@ -68,10 +78,12 @@ def validate_edition_quality(edition_dict: dict) -> EditorialQualityReport:
         message=temp_msg
     ))
 
-    # --- check 2: Evidence Grounding ---
+    # --- check 2: Evidence Grounding & Domain Quality ---
     grounding_passed = True
-    grounding_msg = "All items have robust canonical source URLs."
+    grounding_msg = "All items have robust canonical source URLs from trusted domains."
     missing_url_count = 0
+    blocked_domain_count = 0
+    blocked_matches = []
     
     for item in items:
         sources = item.get("sources", [])
@@ -79,13 +91,24 @@ def validate_edition_quality(edition_dict: dict) -> EditorialQualityReport:
             missing_url_count += 1
             continue
         for src in sources:
-            url = src.get("url", "")
+            url = str(src.get("url", ""))
             if not url or not (url.startswith("http://") or url.startswith("https://")):
                 missing_url_count += 1
+                continue
+            
+            domain = extract_domain(url)
+            for blocked in BLOCKED_DOMAINS:
+                if blocked in domain:
+                    blocked_domain_count += 1
+                    blocked_matches.append(f"{domain} in '{item.get('title')}'")
 
     if missing_url_count > 0:
         grounding_passed = False
         grounding_msg = f"Evidence Grounding Failed: {missing_url_count} sources have missing or invalid URLs."
+        reasons_for_failure.append(grounding_msg)
+    elif blocked_domain_count > 0:
+        grounding_passed = False
+        grounding_msg = f"Domain Quality Failed: Found {blocked_domain_count} sources from blocked/unreliable domains: {', '.join(blocked_matches)}."
         reasons_for_failure.append(grounding_msg)
 
     checks.append(QualityCheckResult(
@@ -130,20 +153,27 @@ def validate_edition_quality(edition_dict: dict) -> EditorialQualityReport:
         message=scoring_msg
     ))
 
-    # --- check 4: Topic Diversity & Domination ---
+    # --- check 4: Topic Diversity & Platform Duplication ---
     diversity_passed = True
-    diversity_msg = "Edition contains a healthy diverse set of stories."
+    diversity_msg = "Edition contains a healthy diverse set of stories across labs."
     
     company_mentions = {}
+    source_domains = {}
     for item in items:
         title_lower = item.get("title", "").lower()
         summary_lower = item.get("summary", "").lower()
         text_to_check = title_lower + " " + summary_lower
         
-        # Simple brand tracking
-        for brand in ["openai", "google", "gemini", "claude", "anthropic", "meta", "llama", "deepseek", "apple"]:
+        # Track main providers
+        for brand in ["openai", "google", "gemini", "claude", "anthropic", "meta", "llama", "deepseek", "apple", "xai", "grok"]:
             if brand in text_to_check:
                 company_mentions[brand] = company_mentions.get(brand, 0) + 1
+        
+        # Track source publisher domains
+        for src in item.get("sources", []):
+            d = extract_domain(str(src.get("url", "")))
+            if d:
+                source_domains[d] = source_domains.get(d, 0) + 1
 
     # Check if a single company dominates the entire edition (>75% of stories)
     for brand, count in company_mentions.items():
@@ -152,6 +182,15 @@ def validate_edition_quality(edition_dict: dict) -> EditorialQualityReport:
             diversity_msg = f"Topic Diversity Failed: Single provider '{brand.upper()}' dominates the entire edition ({count}/{len(items)} stories)."
             reasons_for_failure.append(diversity_msg)
             break
+
+    # Check if a single third-party non-authoritative domain dominates multiple stories
+    if diversity_passed:
+        for domain, count in source_domains.items():
+            if count >= 2 and any(b in domain for b in BLOCKED_DOMAINS):
+                diversity_passed = False
+                diversity_msg = f"Platform Duplication Failed: Multiple stories sourced from low-quality domain '{domain}'."
+                reasons_for_failure.append(diversity_msg)
+                break
 
     checks.append(QualityCheckResult(
         check_name="topic_diversity",
@@ -165,7 +204,7 @@ def validate_edition_quality(edition_dict: dict) -> EditorialQualityReport:
     
     if len(items) < 3 and not is_slow_week:
         slow_week_passed = False
-        slow_week_msg = "Slow Week check Failed: Fewer than 3 stories selected, but slow_week flag is false."
+        slow_week_msg = "Slow Week check Failed: Fewer than 3 stories selected, but is_slow_week is false."
         reasons_for_failure.append(slow_week_msg)
     elif len(items) < 2:
         slow_week_passed = False

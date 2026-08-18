@@ -21,11 +21,11 @@ set -eo pipefail
 PROJECT_ID=$1
 if [ -z "$PROJECT_ID" ]; then
     echo -e "\n[!] Error: Please provide your GCP Project ID."
-    echo -e "Usage:\n  ./deploy.sh <GCP_PROJECT_ID>\n"
+    echo -e "Usage:\n  ./deploy.sh <GCP_PROJECT_ID> [REGION]\n"
     exit 1
 fi
 
-REGION="us-central1"  # Default region with high availability for TTS and Gemini API
+REGION="${2:-us-central1}"  # Default region with high availability for TTS, Vertex AI, and Gemini
 FUNCTION_NAME="frontier-pulse-weekly"
 BUCKET_NAME="frontier-pulse-data-${PROJECT_ID}"
 SCHEDULER_JOB_NAME="frontier-pulse-trigger"
@@ -75,6 +75,7 @@ gcloud services enable \
     cloudfunctions.googleapis.com \
     secretmanager.googleapis.com \
     texttospeech.googleapis.com \
+    aiplatform.googleapis.com \
     storage.googleapis.com \
     cloudscheduler.googleapis.com \
     artifactregistry.googleapis.com \
@@ -132,6 +133,13 @@ run_with_retry gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --role="roles/logging.logWriter" \
     --quiet
 
+# Grant Vertex AI User privileges (Wrapped with retry to handle IAM propagation delay)
+echo "[*] Granting Vertex AI User role at project level..."
+run_with_retry gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${RUNNER_SA_EMAIL}" \
+    --role="roles/aiplatform.user" \
+    --quiet
+
 # 6. Initialize Secrets in Secret Manager
 echo -e "\n[*] Step 5: Initializing secrets in Secret Manager (if missing)..."
 init_secret() {
@@ -174,9 +182,9 @@ gcloud functions deploy "${FUNCTION_NAME}" \
     --entry-point=run_edition_gcf \
     --trigger-http \
     --no-allow-unauthenticated \
-    --ingress-settings=internal-only \
+    --ingress-settings=all \
     --service-account="${RUNNER_SA_EMAIL}" \
-    --set-env-vars="GCS_BUCKET_NAME=${BUCKET_NAME}" \
+    --set-env-vars="GCS_BUCKET_NAME=${BUCKET_NAME},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},USE_VERTEX_AI=true,PODCAST_VOICE_NAME=es-US-Chirp-HD-O" \
     --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest,TELEGRAM_CHAT_ID=TELEGRAM_CHAT_ID:latest" \
     --timeout=1200s \
     --memory=1Gi

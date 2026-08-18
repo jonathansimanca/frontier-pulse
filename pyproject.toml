@@ -7,9 +7,16 @@ requires-python = ">=3.10"
 dependencies = [
     "google-genai>=0.1.1",
     "google-cloud-texttospeech>=2.16.0",
+    "google-cloud-storage>=2.14.0",
+    "functions-framework>=3.0.0",
     "python-dotenv>=1.0.1",
     "pydantic>=2.0.0",
     "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
 ]
 
 [build-system]

@@ -57,27 +57,36 @@ To prevent hallucinated, outdated, or low-value topics from proceeding to synthe
 - **Link & Citation Integrity:** Performs format checking and basic status checks to ensure that sources have valid domain roots.
 - **Temporal Check:** Discards any article whose published date falls outside the computed Bogotá-aligned target week.
 
-### 2.3. Transcripts & Phonetic Script Normalization (`script_generator.py`)
-Synthesizing natural, continuous Spanish voice requires transforming raw text elements into written spoken syllables. This module performs algorithmic text pre-processing:
+### 2.3. Transcripts & Analytical Script Normalization (`script_generator.py`)
+Synthesizing natural, engaging, and professional spoken voice requires transforming raw text elements into structured broadcast monologues with phonetic normalization:
+- **7-Step Monologue Structure:** Follows an analytical arc designed for tech-savvy listeners:
+  1. *Opening Hook:* High-impact framing of the development as strategic or surprising.
+  2. *Main Announcement:* Clear articulation of the core news item.
+  3. *Technical Performance & Benchmarks:* Specific metrics, dates, percentages, and prices.
+  4. *Competitor Comparisons:* Analysis against competing frontier lab models and products.
+  5. *Business & Strategic Implications:* Strategic impact on developers, markets, and enterprise.
+  6. *Broader Industry Trend:* Placing the announcement into larger industry movements.
+  7. *Concise Conclusion & Audience Question:* Thought-provoking closing query.
 - **Phonetic Translations:** Translates technical acronyms into spoken words (e.g., `TTS` $\rightarrow$ `té té ese`, `AI` $\rightarrow$ `inteligencia artificial`, `LLM` $\rightarrow$ `ele ele eme`).
 - **Numerical Expansion:** Converts figures, percentages, dates, and version numbering into explicit Spanish grammar strings (e.g., `v2.5` $\rightarrow$ `versión dos punto cinco`, `15%` $\rightarrow$ `quince por ciento`, `2026` $\rightarrow$ `dos mil veintiséis`).
 - **Dual Transcripts:** Co-generates a Latin American Spanish broadcast script (`podcast_script_es.txt`) and an English written record transcript (`podcast_script_en.txt`) for dual-language accessibility.
 
-### 2.4. Podcast Cover Art via Nano Banana Image Gen (`image_generator.py`)
-Instead of standard stock graphics, every episode features custom fotorrealistic cover art:
-- **Metaphor Synthesis:** Gemini reviews the week's chosen news stories and generates a highly descriptive design schema containing three creative variables: `central_visual_element`, `news_visual_symbols`, and `color_palette`.
-- **Interactions API Execution:** Leverages the **Interactions API** (`client.interactions.create`) of the Google GenAI SDK to interface with **`gemini-3.1-flash-image`** (colloquially named *Nano Banana 2*).
-- **Vertical Ratio:** Renders vertical `9:16` posters in high-fidelity `2K` resolution.
+### 2.4. Podcast Cover Art Generation (`image_generator.py`)
+Every episode features custom visual cover art designed from the week's top stories:
+- **Metaphor Synthesis:** Gemini reviews the week's chosen news stories and extracts visual themes and metaphors across three creative variables: `central_visual_element`, `news_visual_symbols`, and `color_palette`.
+- **Multimodal Generation:** Leverages Vertex AI multimodal image generation (`gemini-2.5-flash-image` with `response_modalities=["IMAGE"]`) and Imagen fallback mechanisms.
+- **Vertical Ratio:** Renders vertical `9:16` posters optimized for podcast and social media display.
 
-### 2.5. Spoken Audio Synthesis (`audio_generator.py`)
-- **Neural Voice Engine:** Directly interfaces with Google Cloud Text-to-Speech via the native Python client SDK.
-- **Voice Configurations:** Employs the high-quality **`es-US-Neural2-B`** voice (neutral male Spanish voice) for broadcast clarity.
-- **Portability:** The engine handles TTS synthesis directly through GCP's endpoints without wrapping external system binaries like `ffmpeg`, making the module 100% portable for lightweight container environments.
+### 2.5. High-Definition Spoken Audio Synthesis (`audio_generator.py`)
+- **Voice Engine:** Directly interfaces with Google Cloud Text-to-Speech via the native Python client SDK.
+- **HD Voice Configuration:** Employs the Latin American Spanish voice **`es-US-Chirp-HD-O`** for broadcast realism.
+- **Sentence-Boundary Chunking:** Intelligently partitions long scripts into natural sentence-level chunks ($\le 4000$ bytes) before API submission, seamlessly concatenating audio bytes to avoid Google Cloud TTS payload size limits.
+- **Portability:** Handles audio synthesis and MP3 assembly purely in Python without requiring external system dependencies like `ffmpeg`.
 
 ### 2.6. Idempotent Telegram Publisher (`telegram_publisher.py`)
 - **Atomic Delivery State:** Employs a granular State Machine tracking the delivery state of separate media assets (`text_delivered`, `image_delivered`, and `audio_delivered`).
-- **Escaping & Formatting:** Features robust MarkdownV2 character escaping, avoiding message breaks from unsupported symbols.
-- **Multipart Photo and Audio Transmissions:** Uses Python `requests` streams to deliver thevertical cover art as an image and the `.mp3` episode as a playable audio file with a customized duration, performing retries and preserving state idempotency.
+- **Escaping & Formatting:** Features robust Markdown character escaping, avoiding message breaks from unsupported symbols.
+- **Multipart Media Transmissions:** Delivers the formatted summary message, vertical cover poster, and final `.mp3` episode to the designated Telegram chat/channel with automatic retry and atomic manifest checkpoints.
 
 ---
 
@@ -93,9 +102,9 @@ Every edition's state is managed through a strictly validated schema implemented
             ┌────────────────┴────────────────┐
             ▼                                 ▼
    ┌─────────────────┐               ┌─────────────────┐
-   │  DeliveryState  │               │  DiscoveryPage  │
+   │  DeliveryState  │               │ DiscoveryEdition│
    │ (text_delivered,│               │ (items: list of │
-   │  image_delivered,               │  DiscoveryItem) │
+   │  image_delivered,               │  NewsItem)      │
    │  audio_delivered)               └─────────────────┘
    └─────────────────┘
 ```
@@ -116,23 +125,21 @@ Tracks the complete lifecycle of a single weekly episode. This manifest is saved
 ### 4.1. Bidirectional Local-to-Cloud Storage Sync (`src/gcs_sync.py`)
 To keep the Cloud Function serverless and stateless while maintaining state persistence across runs:
 - **Sync-on-Start:**
-  - Recursively downloads the last 4 weeks of historical reports from the GCS bucket `gs://<bucket>/output/history/` to `/tmp/output/history/` to enable deduplication.
+  - Recursively downloads historical reports from the GCS bucket `gs://<bucket>/output/history/` to `/tmp/output/history/` to enable deduplication.
   - Downloads any existing `manifest.json` for the current date from `gs://<bucket>/output/editions/<date>/` to `/tmp/output/editions/<date>/` to enable checkpoint-resumptions.
 - **Sync-on-Success:**
-  - Upon successful execution, recursively scans `/tmp/output/` and uploads all generated assets (scripts, MP3, cover JPG, manifest, quality gates) back to GCS, maintaining a versioned folder hierarchy matching the local path tree.
+  - Upon successful execution, recursively scans `/tmp/output/` and uploads all generated assets (scripts, MP3, cover JPG, manifest, quality report) back to GCS, maintaining a versioned folder hierarchy.
 
-### 4.2. Ingress & Organizational Policy Compliance (`constraints/run.allowedIngress`)
-In strict enterprise sandbox environments, Cloud Run services cannot allow open public ingress (`all`). 
-- **Internal Ingress:** The function is deployed with `--ingress-settings=internal-only`.
-- **Intra-Project Trust:** Cloud Scheduler (located in the same project) is recognized natively as **internal traffic** by Google Cloud, bypassing the organizational block flawlessly.
-- **OIDC Token Authorization:** To invoke the internal-only function, Cloud Scheduler passes a secure, cryptographically signed OIDC token matching the `frontier-pulse-invoker` service account, allowing secure execution without exposing the function URL to the public internet.
+### 4.2. Ingress & OIDC Authentication
+- **Secure Ingress:** The function is deployed with `--no-allow-unauthenticated` and `--ingress-settings=all`, enabling Cloud Scheduler to deliver authenticated POST requests across Google's routing network.
+- **OIDC Token Authorization:** Cloud Scheduler passes a cryptographically signed OIDC token matching the `frontier-pulse-invoker` service account (`roles/run.invoker`), ensuring zero unauthorized access.
 
 ### 4.3. Secure Identity Strategy (SAs & IAM)
 Frontier Pulse does not use the high-privilege Default Compute Engine Service Account. It segregates tasks across two custom service accounts:
 
 | Service Account | Role Name | Scope / Permissions granted | Purpose |
 | :--- | :--- | :--- | :--- |
-| **`frontier-pulse-runner`** | Custom Runner SA | `roles/storage.objectAdmin` (on bucket), <br>`roles/secretmanager.secretAccessor` (on secrets), <br>`roles/logging.logWriter` (Cloud Logging) | Runs the container execution and synchronizes GCS state. |
+| **`frontier-pulse-runner`** | Custom Runner SA | `roles/storage.objectAdmin` (on bucket), <br>`roles/secretmanager.secretAccessor` (on secrets), <br>`roles/logging.logWriter` (Cloud Logging), <br>`roles/aiplatform.user` (Vertex AI Gemini) | Runs container execution, invokes Vertex AI Gemini models, synthesizes Text-to-Speech, and synchronizes GCS state. |
 | **`frontier-pulse-invoker`** | Custom Invoker SA | `roles/run.invoker` (granted on the Cloud Run function) | Authorized to trigger the internal HTTP endpoint. Used by Cloud Scheduler. |
 | **`Default Build SA`** | - | `roles/cloudbuild.builds.builder` (Self-healed during deploy) | Used by Cloud Build to assemble the function. |
 
@@ -140,5 +147,7 @@ Frontier Pulse does not use the high-privilege Default Compute Engine Service Ac
 
 ## 5. Security & Credentials Strategy
 
-- **Zero-Hardcoded Secrets:** No keys are committed. All secrets (`GEMINI_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`) are stored in **Secret Manager**.
-- **Environmental Mounts:** Secret Manager secrets are mounted directly as environment variables in the Cloud Run Function runtime, preventing secrets from leaking into the container filesystems or build logs.
+- **Native GCP Vertex AI Authentication:** When running on GCP (Cloud Run Functions), Gemini model inference is natively authenticated through the Runner Service Account's Vertex AI credentials (`vertexai=True`, `roles/aiplatform.user`) without needing a long-lived Gemini API key.
+- **Local Development Authentication:** Authenticates locally using Google Application Default Credentials (`gcloud auth application-default login`).
+- **Zero-Hardcoded Secrets:** No keys are committed. Credentials (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and optional fallback `GEMINI_API_KEY`) are managed via **Secret Manager**.
+- **Environmental Mounts:** Secret Manager secrets are mounted directly as environment variables in the Cloud Run Function runtime, preventing secrets from leaking into container filesystems or build logs.

@@ -1,17 +1,15 @@
 import json
-import os
 import re
-import sys
 from pathlib import Path
-from google import genai
 from google.genai import types
-from google.auth.exceptions import DefaultCredentialsError
 
 from src.config import (
     INPUT_DIR,
     OUTPUT_DIR,
     get_edition_dir,
-    GEMINI_API_KEY,
+    get_genai_client,
+    GEMINI_DEFAULT_MODEL,
+    MAX_API_RETRIES,
     PODCAST_LANGUAGE_ES,
     PODCAST_LANGUAGE_EN,
     PODCAST_MAX_DURATION_MINUTES,
@@ -104,7 +102,7 @@ def format_spanish_date(date_str: str) -> str:
 
 
 def build_spanish_prompt(news_data: dict) -> str:
-    """Build optimized prompt for generating a Latin American Spanish monologue script optimized for TTS."""
+    """Build prompt to generate a fast-paced, analytical, and conversational Latin American Spanish monologue script optimized for TTS."""
     items = news_data.get("items", [])
     edition_date = news_data.get("edition_date", "reciente")
     verbal_date = format_spanish_date(edition_date)
@@ -116,100 +114,84 @@ def build_spanish_prompt(news_data: dict) -> str:
         news_text += f"Título: {item.get('title')}\n"
         news_text += f"Categoría: {item.get('category')}\n"
         news_text += f"Resumen: {item.get('summary')}\n"
+        news_text += f"Por qué importa: {item.get('why_it_matters', '')}\n"
         takeaways = ", ".join(item.get("key_takeaways", []))
         news_text += f"Puntos clave: {takeaways}\n"
 
     slow_week_instruction = ""
     if is_slow_week:
         slow_week_instruction = """
-NOTE DE SEMANA TRANQUILA: Esta semana ha habido pocos lanzamientos mayores en los laboratorios de IA.
-Menciona amablemente que es una semana de estabilidad en la frontera tecnológica y realiza un breve repaso rápido de 1 a 2 minutos sobre las tendencias activas. Mantén el episodio corto y directo.
+NOTA DE SEMANA TRANQUILA: Esta semana ha habido pocos lanzamientos mayores en los laboratorios de IA.
+Menciona con agilidad que es una semana de consolidación en la frontera tecnológica y realiza un análisis conciso y dinámico de 1 a 2 minutos sobre las tendencias activas. Mantén el episodio corto y directo.
 """
 
     prompt = f"""
-Eres un locutor y divulgador experto en Inteligencia Artificial.
-Tu tarea es redactar el guion completo para un podcast semanal en formato MONÓLOGO en ESPAÑOL LATINOAMERICANO.
+Eres un locutor y analista experto en Inteligencia Artificial y tecnología de frontera.
+Tu tarea es redactar el guion completo para el podcast semanal "Frontier Pulse" en formato MONÓLOGO en ESPAÑOL LATINOAMERICANO.
 
 DATOS DEL PODCAST:
 - Nombre del programa: Frontier Pulse
 - Fecha de edición: {verbal_date} ({edition_date})
-- Idioma: Español latinoamericano (natural, directo, conversacional).
-- Duración máxima: {PODCAST_MAX_DURATION_MINUTES} minutos (aproximadamente 300 a 600 palabras).
-- Formato: Monólogo de 1 solo locutor.
+- Idioma: Español latinoamericano (natural, ágil, conversacional).
+- Duración máxima: {PODCAST_MAX_DURATION_MINUTES} minutos (aproximadamente 350 a 650 palabras).
+- Formato: Monólogo de un solo locutor.
 {slow_week_instruction}
 
 NOTICIAS A INCLUIR:
 {news_text}
 
-INSTRUCCIONES OBLIGATORIAS DE REDACCIÓN Y FONÉTICA PARA TEXT-TO-SPEECH (TTS):
+ESTILO Y TONO EDITORIAL:
+- Redacta un guion de noticias de tecnología en un estilo rápido, analítico y conversacional.
+- Comienza con un gancho de apertura contundente que presente el anuncio o desarrollo como algo sorprendente, estratégicamente decisivo o parte de una carrera tecnológica global.
+- Explica las noticias con claridad y respalda el análisis con datos concretos: fechas específicas, benchmarks, porcentajes, precios y comparaciones técnicas.
+- Dirígete directamente a la audiencia con preguntas retóricas, oraciones concisas y transiciones fluidas.
+- Ve más allá de repetir los hechos: explica lo que cada anuncio significa para las empresas involucradas, sus competidores, la comunidad de desarrolladores y el mercado tecnológico en general.
+- Mantén un tono seguro pero equilibrado. Destaca tanto fortalezas como debilidades o limitaciones, evita afirmaciones exageradas y distingue con claridad entre hechos verificados e interpretaciones.
+- Incorpora toques sutiles de ironía o humor ligero e inteligente, manteniendo siempre una narración informativa y profesional.
+- NO incluyas menciones de patrocinio o publicidad bajo ninguna circunstancia.
 
-1. **Introducción DIRECTA:**
-   Inicia INMEDIATAMENTE al grano con una frase casi idéntica a:
-   "Hoy es {verbal_date} y vamos a repasar las últimas novedades relacionadas con Inteligencia Artificial."
+ESTRUCTURA DE ORGANIZACIÓN DEL GUION:
+1. Gancho de apertura (Opening hook)
+2. Anuncio principal y contexto (Main announcement)
+3. Rendimiento técnico y detalles del producto o modelo (Technical performance and product details)
+4. Comparaciones con competidores clave (Comparisons with competitors)
+5. Implicaciones comerciales y estratégicas (Business and strategic implications)
+6. Tendencia más amplia de la industria (Broader industry trend)
+7. Conclusión concisa y pregunta de reflexión para la audiencia (Concise conclusion and question for the audience)
 
-2. **NÚMEROS, FECHAS Y VERSIONES EN PALABRAS (CRÍTICO):**
-   - Escribe TODAS las fechas completamente en letras (ej. "tres de agosto" en lugar de "2026-08-03").
-   - Escribe los números de versión en palabras (ej. "tres punto uno" en lugar de "3.1").
-   - Escribe las cifras y porcentajes en palabras (ej. "ochenta por ciento", "tres noticias principales").
-   - Escribe los años en palabras (ej. "dos mil veintiséis" en lugar de "2026").
+REGLAS FONÉTICAS Y DE TEXT-TO-SPEECH (TTS):
+- Mantén la extensión total entre 380 y 520 palabras para garantizar un ritmo ágil y dinámico (aproximadamente 3 a 4 minutos de locución).
+- Escribe TODAS las fechas completamente en letras (ej. "{verbal_date}" o "diecisiete de agosto").
+- Escribe los números de versión en palabras (ej. "tres punto siete", "dos punto cinco", "cuatro punto cero").
+- Escribe cifras, porcentajes y precios en palabras (ej. "veinte por ciento", "cien millones de dólares", "tres modelos").
+- Escribe los años en palabras (ej. "dos mil veintiséis").
+- Escribe siglas expandidas o legibles (ej. "inteligencia artificial", "modelos de lenguaje", "A P I", "Google Cloud").
+- Escribe ÚNICAMENTE el texto plano que será pronunciado. NO agregues corchetes, paréntesis con efectos de sonido, acotaciones ni etiquetas de locutor.
 
-3. **SIGLAS Y TÉRMINOS TÉCNICOS EN PALABRAS:**
-   - En lugar de "IA", di preferentemente "inteligencia artificial" o escribe "I A".
-   - En lugar de "LLMs", escribe "modelos de lenguaje".
-   - En lugar de "API", escribe "A P I" o "interfaces de programación".
-   - En lugar de "GCP", escribe "Google Cloud".
-
-4. **Formato limpio:**
-   - Escribe ÚNICAMENTE el texto que el locutor dirá en voz alta.
-   - NO incluyas acotaciones entre paréntesis o corchetes ni etiquetas de locutor.
-   - Usa signos de puntuación clara (puntos y comas) para marcar pausas del locutor.
-
-Genera el guion en español latinoamericano a continuación:
+Genera el guion completo en español latinoamericano a continuación:
 """
     return prompt.strip()
 
 
 def build_english_prompt(spanish_script: str, news_data: dict) -> str:
-    """Build prompt to generate the English transcript matching the Spanish script."""
+    """Build prompt to generate the English transcript matching the Spanish script with identical analytical tone and structure."""
     edition_date = news_data.get("edition_date", "recent")
 
     prompt = f"""
-You are an expert AI communicator and translator.
-Translate and adapt the following Latin American Spanish podcast transcript for 'Frontier Pulse' into a natural, engaging English podcast transcript.
+You are an expert tech journalist, AI communicator, and translator.
+Translate and adapt the following Latin American Spanish podcast script for 'Frontier Pulse' (Edition: {edition_date}) into a natural, fast-paced, analytical, and engaging English podcast transcript.
 
 Original Spanish Script:
 {spanish_script}
 
 INSTRUCTIONS:
-1. Keep the exact same structure and concise, direct tone.
-2. The intro must start directly with: "Today is {edition_date} and we are going to review the latest AI developments."
-3. Do NOT include stage directions, music notes, or speaker tags in brackets or parentheses.
-4. Provide ONLY the spoken English script content.
+1. Match the fast-paced, analytical, confident, and conversational style of the original script.
+2. Maintain the structure: Opening hook, Main announcement, Technical details & benchmarks, Competitor comparisons, Strategic implications, Industry trends, and Concise concluding question.
+3. Preserve all specific metrics, benchmarks, dates, percentages, and balanced technical critiques.
+4. Do NOT include stage directions, music cues, sound effects, or speaker labels in brackets or parentheses.
+5. Provide ONLY the clean spoken English transcript.
 """
     return prompt.strip()
-
-
-def get_genai_client() -> genai.Client:
-    """Initialize Gemini client using API Key or Application Default Credentials (Vertex AI)."""
-    if GEMINI_API_KEY:
-        print("[*] Authenticating with Gemini API Key...")
-        return genai.Client(api_key=GEMINI_API_KEY)
-
-    project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
-    location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-
-    print("[*] Authenticating with GCP Application Default Credentials (Vertex AI)...")
-    try:
-        if project:
-            return genai.Client(vertexai=True, project=project, location=location)
-        else:
-            return genai.Client(vertexai=True, location=location)
-    except DefaultCredentialsError:
-        print("\n[!] AUTHENTICATION ERROR:")
-        print("Google Cloud Application Default Credentials (ADC) not found.")
-        print("Run the following command in your terminal to authenticate:")
-        print("   gcloud auth application-default login\n")
-        sys.exit(1)
 
 
 def generate_podcast_script(input_filename: str = None) -> tuple[Path, Path]:
@@ -222,16 +204,38 @@ def generate_podcast_script(input_filename: str = None) -> tuple[Path, Path]:
     client = get_genai_client()
 
     # 1. Generate Spanish (Latin America) Script
-    print("[*] Generating Latin American Spanish podcast script with Gemini...")
+    print(f"[*] Generating Latin American Spanish podcast script with Gemini ({GEMINI_DEFAULT_MODEL})...")
     es_prompt = build_spanish_prompt(news_data)
-    es_response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=es_prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.7,
-            top_p=0.9,
-        )
-    )
+    
+    es_models = [GEMINI_DEFAULT_MODEL]
+    if "gemini-2.5-flash" not in es_models:
+        es_models.append("gemini-2.5-flash")
+    es_models = es_models[:MAX_API_RETRIES]
+
+    es_response = None
+    last_error_es = None
+    for attempt_idx, model_name in enumerate(es_models, start=1):
+        try:
+            es_response = client.models.generate_content(
+                model=model_name,
+                contents=es_prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    top_p=0.9,
+                )
+            )
+            break
+        except Exception as e:
+            if last_error_es is None or str(e).strip():
+                last_error_es = e
+            err_summary = str(e).split("\n")[0][:120]
+            print(f"[!] Spanish script generation attempt {attempt_idx}/{len(es_models)} ({model_name}) failed: {err_summary}")
+
+    if es_response is None:
+        if last_error_es:
+            raise last_error_es
+        raise RuntimeError("Failed to generate Spanish podcast script after exhausting all retry attempts.")
+
     raw_script_es = es_response.text.strip()
 
     # Post-process script to ensure 100% human-readable phonetic text for TTS
@@ -271,16 +275,37 @@ def generate_podcast_script(input_filename: str = None) -> tuple[Path, Path]:
     en_txt_path_generic = OUTPUT_DIR / "podcast_script_en.txt"
 
     try:
-        print("[*] Generating English transcript with Gemini...")
+        print(f"[*] Generating English transcript with Gemini ({GEMINI_DEFAULT_MODEL})...")
         en_prompt = build_english_prompt(script_es, news_data)
-        en_response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=en_prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.5,
-                top_p=0.9,
-            )
-        )
+        
+        en_models = [GEMINI_DEFAULT_MODEL]
+        if "gemini-2.5-flash" not in en_models:
+            en_models.append("gemini-2.5-flash")
+        en_models = en_models[:MAX_API_RETRIES]
+
+        en_response = None
+        last_error = None
+        for attempt_idx, model_name in enumerate(en_models, start=1):
+            try:
+                en_response = client.models.generate_content(
+                    model=model_name,
+                    contents=en_prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.5,
+                        top_p=0.9,
+                    )
+                )
+                break
+            except Exception as e:
+                if last_error is None or str(e).strip():
+                    last_error = e
+                err_summary = str(e).split("\n")[0][:120]
+                print(f"[!] English script generation attempt {attempt_idx}/{len(en_models)} ({model_name}) failed: {err_summary}")
+
+        if en_response is None:
+            if last_error:
+                raise last_error
+            raise RuntimeError("English transcript generation failed after all attempts.")
         script_en = en_response.text.strip()
 
         # Save English script files

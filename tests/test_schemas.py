@@ -7,7 +7,7 @@ def test_valid_edition():
     """Test that a valid edition dictionary successfully parses into the Edition model."""
     valid_data = {
         "edition_date": "2026-08-04",
-        "title": "Frontier Pulse - Edición 2026-08-04",
+        "title": "Frontier Pulse - Edition 2026-08-04",
         "is_slow_week": False,
         "generation_timestamp": "2026-08-04T19:00:00Z",
         "items": [
@@ -43,7 +43,7 @@ def test_invalid_url_validation():
     """Test that an invalid URL in sources triggers a ValidationError."""
     invalid_data = {
         "edition_date": "2026-08-04",
-        "title": "Frontier Pulse - Edición 2026-08-04",
+        "title": "Frontier Pulse - Edition 2026-08-04",
         "is_slow_week": False,
         "items": [
             {
@@ -68,7 +68,7 @@ def test_missing_required_fields():
     """Test that missing required fields trigger a ValidationError."""
     invalid_data = {
         "edition_date": "2026-08-04",
-        "title": "Frontier Pulse - Edición 2026-08-04",
+        "title": "Frontier Pulse - Edition 2026-08-04",
         "is_slow_week": False,
         "items": [
             {
@@ -87,7 +87,7 @@ def test_empty_lists_validation():
     """Test that empty key_takeaways or sources list triggers a ValidationError."""
     invalid_data = {
         "edition_date": "2026-08-04",
-        "title": "Frontier Pulse - Edición 2026-08-04",
+        "title": "Frontier Pulse - Edition 2026-08-04",
         "is_slow_week": False,
         "items": [
             {

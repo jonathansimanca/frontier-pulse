@@ -8,13 +8,19 @@ Compatible with both **local development runs** (cached via local JSON transacti
 
 ## 🚀 Key Features
 
-1. **Intelligent AI Web Research (Gemini Search Grounding):** Priority-driven web exploration across nine core AI topics with automated deduplication against the last 4 weeks of history.
-2. **Editorial Quality Gate (`src/quality_gate.py`):** Multi-rule content checking verifying topic relevance, validity of citations/links, and date compliance before proceeding.
-3. **Phonetic TTS Text Normalization (`src/script_generator.py`):** Dynamic phonetic transcript conversion translating numbers, dates, version numbers, and technical acronyms into fully spoken Spanish words.
-4. **Fotorrealistic Cover Art (Nano Banana Image Gen):** Reviews the week's chosen news stories and generates vertical cover art using the **Interactions API** of the **`gemini-3.1-flash-image`** model.
-5. **High-Fidelity es-US Spoken Audio (GCP Text-to-Speech):** Synthesizes natural, high-fidelity spoken Latin American Spanish audio using Google Cloud Neural2 voices.
-6. **Dual Transcripts:** Automatically produces fully-formed, clean written transcripts in both Latin American Spanish and English.
-7. **Idempotent Telegram Publisher:** Delivers the formatted markdown bulletin, the vertical fotorrealistic cover poster, and the final `.mp3` episode to your Telegram chat/channel. Supports resuming from failures dynamically.
+1. **Multi-Track AI Web Research (Gemini Search Grounding):** Priority-driven, multi-track web discovery exploring four distinct tracks concurrently:
+   - *Frontier Labs & Flagships:* Google DeepMind (Project Astra, Gemini), OpenAI, Anthropic (Claude), DeepSeek, Meta AI, xAI.
+   - *Agentic Frameworks & Developer Tooling:* Coding agents, Computer Use, APIs, multimodal execution.
+   - *Hardware & Infrastructure:* AI acceleration (Cerebras, Nvidia, Groq), custom inference silicon, and lab restructuring.
+   - *Open Source & Open Weights:* HuggingFace, Qwen, Kimi, DeepSeek, and Llama releases.
+2. **Deterministic Deduplication & History Tracking:** Deduplicates candidates against historical editions using normalized source URLs and title similarity.
+3. **4-Tier Editorial Selection Rubric:** Rigorously ranks candidates into Tiers (Tier 1 Flagship Releases & Infrastructure, Tier 2 Open Weights & Dev Tools, Tier 3 Minor Patches, Tier 4 Rejected Spam & Portfolios).
+4. **Editorial Quality Gate (`src/quality_gate.py`):** Multi-rule verification checking domain trustworthiness, temporal window compliance, and publisher diversity.
+5. **Analytical Monologue Scripting & Phonetic Normalization (`src/script_generator.py`):** Produces a fast-paced, analytical 7-step monologue script (Opening hook, Main announcement, Technical details & benchmarks, Competitor comparisons, Strategic implications, Industry trends, and Concluding audience question) with phonetic text normalization for spoken Spanish.
+6. **AI Generated Cover Art (`src/image_generator.py`):** Generates vertical 9:16 podcast cover art matching the edition's news themes using Vertex AI multimodal image generation (`gemini-2.5-flash-image`).
+7. **High-Definition es-US Spoken Audio (Google Cloud Text-to-Speech):** Synthesizes Latin American Spanish audio using the HD voice (`es-US-Chirp-HD-O`) with sentence-boundary chunking for seamless long-form audio.
+8. **Dual Transcripts:** Automatically produces structured, clean written transcripts in both Latin American Spanish and English.
+9. **Idempotent Telegram Publisher:** Delivers the formatted markdown bulletin, the vertical cover poster, and the final `.mp3` episode to your Telegram chat/channel with atomic manifest checkpoints.
 
 ---
 
@@ -22,38 +28,42 @@ Compatible with both **local development runs** (cached via local JSON transacti
 
 ### Prerequisites
 - **Python**: `3.10+` (developed and verified on `3.11` and `3.14`)
-- **Package Manager**: `uv`
-- **Google Cloud Auth**: Authenticate your terminal with Google Application Default Credentials (ADC) to access GCP Text-to-Speech:
+- **Google Cloud Auth**: Authenticate your terminal with Google Application Default Credentials (ADC) to access Vertex AI Gemini and GCP Text-to-Speech:
   ```bash
   gcloud auth application-default login
   ```
 
 ### Installation
-1. Sync project dependencies:
+1. Install project dependencies:
    ```bash
-   uv sync
+   pip3 install -r requirements.txt
    ```
 
 2. Configure environment variables (`.env`):
-   Create a `.env` file in the root directory:
+   Copy `.env.example` to `.env` and fill in your configuration:
    ```env
-   # Gemini API Credentials (required for research, scripting, and images)
-   GEMINI_API_KEY=your_gemini_api_key
+   # Vertex AI Gemini on GCP Project (Preferred)
+   GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+   GOOGLE_CLOUD_LOCATION=us-central1
+   USE_VERTEX_AI=true
 
-   # Telegram Bot Delivery Configs (required to send to Telegram)
+   # Telegram Bot Configuration
    TELEGRAM_BOT_TOKEN=7123456789:AAHzX89_example_token
    TELEGRAM_CHAT_ID=-1001234567890
+
+   # Optional Gemini Developer API Key fallback
+   # GEMINI_API_KEY=your_gemini_api_key
    ```
 
 ### Running Locally
 Run the entire end-to-end pipeline:
 ```bash
-uv run python -m src.main
+python3 -m src.main
 ```
 
-Run unit and integration tests (27 passing tests):
+Run unit and integration tests (29 passing tests):
 ```bash
-uv run --no-project --with pytest --with pydantic --with requests --with google-genai --with python-dotenv --with google-cloud-storage --with functions-framework python -m pytest
+pytest -v
 ```
 
 ---

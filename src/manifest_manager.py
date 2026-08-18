@@ -3,8 +3,8 @@ import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from src.config import OUTPUT_DIR, get_edition_dir
-from src.schemas import EditionManifest, DeliveryState
+from src.config import get_edition_dir
+from src.schemas import EditionManifest
 
 
 def get_manifest_path(edition_date: str) -> Path:
@@ -65,7 +65,7 @@ def save_manifest_atomic(manifest: EditionManifest) -> None:
 
 def update_manifest_stage(manifest: EditionManifest, stage: str, artifacts: dict = None, error: str = None) -> None:
     """Update the status of a manifest, recording successful stages, failures, and generated artifacts."""
-    valid_stages = ["created", "researched", "scripted", "audio_ready", "delivered", "failed"]
+    valid_stages = ["created", "researched", "scripted", "audio_ready", "delivered", "completed", "failed"]
     
     manifest.updated_at = datetime.now(timezone.utc)
     
