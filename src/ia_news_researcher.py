@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
@@ -10,6 +11,7 @@ from src.config import (
     OUTPUT_DIR,
     get_edition_dir,
     get_genai_client,
+    get_current_edition_date,
     GEMINI_RESEARCH_MODEL,
     MAX_API_RETRIES,
     RESEARCH_TRACKS,
@@ -388,7 +390,7 @@ def filter_candidate_sources(candidates_dict: dict, edition_date: str) -> list[d
 def research_ai_news(edition_date: str = None) -> dict:
     """Run Multi-Track AI web research: Discovery -> Deduplication -> 4-Tier Selection & Ranking."""
     if not edition_date:
-        edition_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        edition_date = get_current_edition_date()
 
     start_date, end_date = calculate_edition_window(edition_date)
     human_window = format_human_date_window(edition_date)
@@ -416,10 +418,10 @@ def research_ai_news(edition_date: str = None) -> dict:
         )
 
         track_success = False
-        max_attempts = MAX_API_RETRIES
+        max_attempts = 3
 
         for attempt_idx in range(1, max_attempts + 1):
-            curr_model = research_model
+            curr_model = research_model if attempt_idx == 1 else "gemini-3.6-flash"
             temp = 0.3 if attempt_idx == 1 else 0.1
             try:
                 track_response = client.models.generate_content(
@@ -436,14 +438,19 @@ def research_ai_news(edition_date: str = None) -> dict:
                 print(f"       [+] {prefix} Discovered {len(track_items)} candidates in track '{track_key}'")
                 raw_candidates_pool.extend(track_items)
                 track_success = True
+                # Pacing between track queries to avoid Gemini API RPM exhaustion
+                time.sleep(3)
                 break
             except Exception as e:
                 err_summary = str(e).split("\n")[0][:120]
                 print(f"       [!] Track '{track_key}' attempt {attempt_idx}/{max_attempts} ({curr_model}) failed: {err_summary}")
-                # If the primary model failed (e.g. 404 on Vertex AI), dynamically switch primary model for subsequent tracks
-                if curr_model != "gemini-2.5-flash":
-                    research_model = "gemini-2.5-flash"
-                    print(f"       [*] Switching default research model to '{research_model}' for remaining tracks.")
+                # Exponential backoff on rate limits / quota exhaustion
+                if "429" in err_summary or "RESOURCE_EXHAUSTED" in err_summary:
+                    sleep_time = 5 * attempt_idx
+                    print(f"       [*] Rate limit hit. Waiting {sleep_time}s before retry with fallback model...")
+                    time.sleep(sleep_time)
+                else:
+                    time.sleep(2)
 
         if not track_success:
             print(f"       [!] Track '{track_key}' failed all {max_attempts} attempts. Skipping track.")
@@ -505,8 +512,8 @@ def research_ai_news(edition_date: str = None) -> dict:
     )
 
     selection_models = [research_model]
-    if "gemini-2.5-flash" not in selection_models:
-        selection_models.append("gemini-2.5-flash")
+    if "gemini-3.7-flash" not in selection_models:
+        selection_models.append("gemini-3.7-flash")
     selection_models = selection_models[:MAX_API_RETRIES]
 
     news_data = None

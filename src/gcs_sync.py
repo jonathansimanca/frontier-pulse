@@ -47,14 +47,15 @@ def download_from_gcs():
             blob.download_to_filename(str(local_path))
             print(f"    - Synchronized: gs://{GCS_BUCKET_NAME}/{blob.name} -> {local_path}")
 
-        # Download existing active manifest files (for checkpoint resume)
+        # Download existing active edition files and manifests (for checkpoint resume)
         blobs_editions = client.list_blobs(GCS_BUCKET_NAME, prefix="output/editions/")
         for blob in blobs_editions:
-            if blob.name.endswith("manifest.json"):
-                local_path = OUTPUT_DIR / blob.name[len("output/"):]
-                local_path.parent.mkdir(parents=True, exist_ok=True)
-                blob.download_to_filename(str(local_path))
-                print(f"    - Synchronized active manifest: gs://{GCS_BUCKET_NAME}/{blob.name} -> {local_path}")
+            if blob.name.endswith("/"):
+                continue
+            local_path = OUTPUT_DIR / blob.name[len("output/"):]
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            blob.download_to_filename(str(local_path))
+            print(f"    - Synchronized edition file: gs://{GCS_BUCKET_NAME}/{blob.name} -> {local_path}")
 
         print("[+] GCS sync: Download phase completed successfully.")
     except Exception as e:

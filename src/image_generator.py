@@ -43,7 +43,7 @@ Do NOT include any extra markdown outside the ```json block.
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.7-flash",
             contents=design_prompt,
             config=types.GenerateContentConfig(
                 temperature=0.4,
@@ -69,15 +69,15 @@ Do NOT include any extra markdown outside the ```json block.
     print(f"[*] Prompt built for Cover Art Generation:\n    \"{full_prompt}\"")
 
     # Step 3: Call Image Generation model
-    print("[*] Generating image via Gemini Image Generation (gemini-2.5-flash-image)...")
+    print("[*] Generating image via Gemini Image Generation (gemini-3.1-flash-image)...")
     edition_dir = get_edition_dir(edition_date)
     output_path = edition_dir / "podcast_cover.jpg"
     output_path_legacy = OUTPUT_DIR / "podcast_cover.jpg"
 
-    # Attempt 1: Native Multimodal Image Generation on Vertex AI (gemini-2.5-flash-image)
+    # Attempt 1: Native Multimodal Image Generation (gemini-3.1-flash-image)
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash-image",
+            model="gemini-3.1-flash-image",
             contents=full_prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE"],
@@ -93,13 +93,13 @@ Do NOT include any extra markdown outside the ```json block.
                         f.write(image_bytes)
                     with open(output_path_legacy, "wb") as f:
                         f.write(image_bytes)
-                    print(f"[+] Successfully generated and saved podcast cover image via gemini-2.5-flash-image! ({len(image_bytes)} bytes)")
+                    print(f"[+] Successfully generated and saved podcast cover image via gemini-3.1-flash-image! ({len(image_bytes)} bytes)")
                     return output_path
     except Exception as e:
         err_msg = str(e).split("\n")[0][:120]
-        print(f"[!] gemini-2.5-flash-image generation failed ({err_msg}). Trying fallback...")
+        print(f"[!] gemini-3.1-flash-image generation failed ({err_msg}). Trying fallback...")
 
-    # Attempt 2: Vertex AI Imagen 3 (imagen-3.0-generate-002)
+    # Attempt 2: Imagen 3 (imagen-3.0-generate-002)
     try:
         result = client.models.generate_images(
             model=IMAGE_MODEL_NAME,

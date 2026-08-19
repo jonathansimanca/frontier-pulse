@@ -73,8 +73,8 @@ Synthesizing natural, engaging, and professional spoken voice requires transform
 
 ### 2.4. Podcast Cover Art Generation (`image_generator.py`)
 Every episode features custom visual cover art designed from the week's top stories:
-- **Metaphor Synthesis:** Gemini reviews the week's chosen news stories and extracts visual themes and metaphors across three creative variables: `central_visual_element`, `news_visual_symbols`, and `color_palette`.
-- **Multimodal Generation:** Leverages Vertex AI multimodal image generation (`gemini-2.5-flash-image` with `response_modalities=["IMAGE"]`) and Imagen fallback mechanisms.
+- **Metaphor Synthesis:** Gemini (`gemini-3.7-flash`) reviews the week's chosen news stories and extracts visual themes and metaphors across three creative variables: `central_visual_element`, `news_visual_symbols`, and `color_palette`.
+- **Multimodal Generation:** Leverages Gemini multimodal image generation (`gemini-3.1-flash-image` with `response_modalities=["IMAGE"]`) and Imagen fallback mechanisms.
 - **Vertical Ratio:** Renders vertical `9:16` posters optimized for podcast and social media display.
 
 ### 2.5. High-Definition Spoken Audio Synthesis (`audio_generator.py`)
@@ -139,7 +139,7 @@ Frontier Pulse does not use the high-privilege Default Compute Engine Service Ac
 
 | Service Account | Role Name | Scope / Permissions granted | Purpose |
 | :--- | :--- | :--- | :--- |
-| **`frontier-pulse-runner`** | Custom Runner SA | `roles/storage.objectAdmin` (on bucket), <br>`roles/secretmanager.secretAccessor` (on secrets), <br>`roles/logging.logWriter` (Cloud Logging), <br>`roles/aiplatform.user` (Vertex AI Gemini) | Runs container execution, invokes Vertex AI Gemini models, synthesizes Text-to-Speech, and synchronizes GCS state. |
+| **`frontier-pulse-runner`** | Custom Runner SA | `roles/storage.objectAdmin` (on bucket), <br>`roles/secretmanager.secretAccessor` (on secrets), <br>`roles/logging.logWriter` (Cloud Logging) | Runs container execution, synthesizes Text-to-Speech, accesses Secret Manager secrets, and synchronizes GCS state. |
 | **`frontier-pulse-invoker`** | Custom Invoker SA | `roles/run.invoker` (granted on the Cloud Run function) | Authorized to trigger the internal HTTP endpoint. Used by Cloud Scheduler. |
 | **`Default Build SA`** | - | `roles/cloudbuild.builds.builder` (Self-healed during deploy) | Used by Cloud Build to assemble the function. |
 
@@ -147,7 +147,7 @@ Frontier Pulse does not use the high-privilege Default Compute Engine Service Ac
 
 ## 5. Security & Credentials Strategy
 
-- **Native GCP Vertex AI Authentication:** When running on GCP (Cloud Run Functions), Gemini model inference is natively authenticated through the Runner Service Account's Vertex AI credentials (`vertexai=True`, `roles/aiplatform.user`) without needing a long-lived Gemini API key.
-- **Local Development Authentication:** Authenticates locally using Google Application Default Credentials (`gcloud auth application-default login`).
-- **Zero-Hardcoded Secrets:** No keys are committed. Credentials (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and optional fallback `GEMINI_API_KEY`) are managed via **Secret Manager**.
+- **Google Gemini Developer API Key (`GEMINI_API_KEY`):** LLM research, script synthesis, and cover art generation authenticate directly using `GEMINI_API_KEY`.
+- **GCP Services Authentication:** Text-to-Speech synthesis and Cloud Storage sync authenticate using Google Application Default Credentials (ADC) locally and the custom Runner Service Account in Cloud Run Functions.
+- **Zero-Hardcoded Secrets:** No keys are committed. Credentials (`GEMINI_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`) are managed via **Secret Manager**.
 - **Environmental Mounts:** Secret Manager secrets are mounted directly as environment variables in the Cloud Run Function runtime, preventing secrets from leaking into container filesystems or build logs.

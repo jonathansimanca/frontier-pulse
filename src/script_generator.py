@@ -194,13 +194,14 @@ INSTRUCTIONS:
     return prompt.strip()
 
 
-def generate_podcast_script(input_filename: str = None) -> tuple[Path, Path]:
+def generate_podcast_script(input_filename: str | Path = None, news_data: dict = None) -> tuple[Path, Path]:
     """Generate both Spanish (Latin America) and English podcast transcripts using Gemini API, normalized for TTS."""
-    input_path = None
-    if input_filename:
-        input_path = INPUT_DIR / input_filename
+    if news_data is None:
+        input_path = None
+        if input_filename:
+            input_path = Path(input_filename) if isinstance(input_filename, Path) or "/" in str(input_filename) or "\\" in str(input_filename) else INPUT_DIR / input_filename
+        news_data = load_news_data(input_path)
 
-    news_data = load_news_data(input_path)
     client = get_genai_client()
 
     # 1. Generate Spanish (Latin America) Script
@@ -208,8 +209,8 @@ def generate_podcast_script(input_filename: str = None) -> tuple[Path, Path]:
     es_prompt = build_spanish_prompt(news_data)
     
     es_models = [GEMINI_DEFAULT_MODEL]
-    if "gemini-2.5-flash" not in es_models:
-        es_models.append("gemini-2.5-flash")
+    if "gemini-3.7-flash" not in es_models:
+        es_models.append("gemini-3.7-flash")
     es_models = es_models[:MAX_API_RETRIES]
 
     es_response = None
@@ -279,8 +280,8 @@ def generate_podcast_script(input_filename: str = None) -> tuple[Path, Path]:
         en_prompt = build_english_prompt(script_es, news_data)
         
         en_models = [GEMINI_DEFAULT_MODEL]
-        if "gemini-2.5-flash" not in en_models:
-            en_models.append("gemini-2.5-flash")
+        if "gemini-3.7-flash" not in en_models:
+            en_models.append("gemini-3.7-flash")
         en_models = en_models[:MAX_API_RETRIES]
 
         en_response = None

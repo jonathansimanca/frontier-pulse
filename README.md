@@ -17,7 +17,7 @@ Compatible with both **local development runs** (cached via local JSON transacti
 3. **4-Tier Editorial Selection Rubric:** Rigorously ranks candidates into Tiers (Tier 1 Flagship Releases & Infrastructure, Tier 2 Open Weights & Dev Tools, Tier 3 Minor Patches, Tier 4 Rejected Spam & Portfolios).
 4. **Editorial Quality Gate (`src/quality_gate.py`):** Multi-rule verification checking domain trustworthiness, temporal window compliance, and publisher diversity.
 5. **Analytical Monologue Scripting & Phonetic Normalization (`src/script_generator.py`):** Produces a fast-paced, analytical 7-step monologue script (Opening hook, Main announcement, Technical details & benchmarks, Competitor comparisons, Strategic implications, Industry trends, and Concluding audience question) with phonetic text normalization for spoken Spanish.
-6. **AI Generated Cover Art (`src/image_generator.py`):** Generates vertical 9:16 podcast cover art matching the edition's news themes using Vertex AI multimodal image generation (`gemini-2.5-flash-image`).
+6. **AI Generated Cover Art (`src/image_generator.py`):** Generates vertical 9:16 podcast cover art matching the edition's news themes using Gemini multimodal image generation (`gemini-3.1-flash-image`).
 7. **High-Definition es-US Spoken Audio (Google Cloud Text-to-Speech):** Synthesizes Latin American Spanish audio using the HD voice (`es-US-Chirp-HD-O`) with sentence-boundary chunking for seamless long-form audio.
 8. **Dual Transcripts:** Automatically produces structured, clean written transcripts in both Latin American Spanish and English.
 9. **Idempotent Telegram Publisher:** Delivers the formatted markdown bulletin, the vertical cover poster, and the final `.mp3` episode to your Telegram chat/channel with atomic manifest checkpoints.
@@ -28,7 +28,8 @@ Compatible with both **local development runs** (cached via local JSON transacti
 
 ### Prerequisites
 - **Python**: `3.10+` (developed and verified on `3.11` and `3.14`)
-- **Google Cloud Auth**: Authenticate your terminal with Google Application Default Credentials (ADC) to access Vertex AI Gemini and GCP Text-to-Speech:
+- **Google Gemini API Key**: Set `GEMINI_API_KEY` in your `.env` for LLM research, script generation, and cover art creation.
+- **Google Cloud Auth (for TTS and GCS sync)**: Authenticate your terminal with Google Application Default Credentials (ADC) to access GCP Text-to-Speech and Cloud Storage:
   ```bash
   gcloud auth application-default login
   ```
@@ -42,17 +43,16 @@ Compatible with both **local development runs** (cached via local JSON transacti
 2. Configure environment variables (`.env`):
    Copy `.env.example` to `.env` and fill in your configuration:
    ```env
-   # Vertex AI Gemini on GCP Project (Preferred)
+   # Google Gemini Developer API Key (Required)
+   GEMINI_API_KEY=your_gemini_api_key_here
+
+   # Google Cloud Project (used for Cloud Storage persistence and Text-to-Speech)
    GOOGLE_CLOUD_PROJECT=your-gcp-project-id
    GOOGLE_CLOUD_LOCATION=us-central1
-   USE_VERTEX_AI=true
 
    # Telegram Bot Configuration
    TELEGRAM_BOT_TOKEN=7123456789:AAHzX89_example_token
    TELEGRAM_CHAT_ID=-1001234567890
-
-   # Optional Gemini Developer API Key fallback
-   # GEMINI_API_KEY=your_gemini_api_key
    ```
 
 ### Running Locally

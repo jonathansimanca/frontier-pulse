@@ -22,59 +22,52 @@ else:
 INPUT_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+from datetime import datetime, timezone, timedelta
+
+# Timezone Configuration (America/Bogota UTC-5)
+BOGOTA_TZ = timezone(timedelta(hours=-5))
+
+def get_current_edition_date() -> str:
+    """Return the current edition date in America/Bogota timezone (YYYY-MM-DD)."""
+    return datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d")
+
 def get_edition_dir(edition_date: str) -> Path:
     """Return the absolute path for the directory of a specific edition, ensuring it exists."""
     edition_dir = OUTPUT_DIR / "editions" / edition_date
     edition_dir.mkdir(parents=True, exist_ok=True)
     return edition_dir
 
-# GCP & Vertex AI Configuration
+# GCP Configuration
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT", "")
 GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-USE_VERTEX_AI = os.getenv("USE_VERTEX_AI", "true").lower() in ("true", "1", "yes")
 
-# Optional Gemini Developer API Key fallback
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+# Google Gemini API Key
+GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or "").strip().strip('"').strip("'")
 
 
 def get_genai_client():
-    """Initialize Google GenAI client prioritizing Vertex AI on GCP with ADC or fallback to Gemini Developer API Key."""
+    """Initialize Google GenAI client with Gemini Developer API Key."""
     import sys
     from google import genai
     from google.genai import types
-    from google.auth.exceptions import DefaultCredentialsError
 
     http_opts = types.HttpOptions(timeout=60000)
 
-    if USE_VERTEX_AI or not GEMINI_API_KEY:
-        print(f"[*] Authenticating with Vertex AI (project={GOOGLE_CLOUD_PROJECT or 'default ADC'}, location={GOOGLE_CLOUD_LOCATION})...")
-        try:
-            if GOOGLE_CLOUD_PROJECT:
-                return genai.Client(vertexai=True, project=GOOGLE_CLOUD_PROJECT, location=GOOGLE_CLOUD_LOCATION, http_options=http_opts)
-            else:
-                return genai.Client(vertexai=True, location=GOOGLE_CLOUD_LOCATION, http_options=http_opts)
-        except DefaultCredentialsError:
-            if GEMINI_API_KEY:
-                print("[!] Vertex AI ADC not found, falling back to GEMINI_API_KEY...")
-                return genai.Client(api_key=GEMINI_API_KEY, http_options=http_opts)
-            print("\n[!] AUTHENTICATION ERROR:")
-            print("Google Cloud Application Default Credentials (ADC) not found.")
-            print("Run the following command in your terminal to authenticate with your GCP project:")
-            print("   gcloud auth application-default login")
-            print("Or set GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json\n")
-            sys.exit(1)
-        except Exception as e:
-            if GEMINI_API_KEY:
-                print(f"[!] Vertex AI connection failed ({e}), falling back to GEMINI_API_KEY...")
-                return genai.Client(api_key=GEMINI_API_KEY, http_options=http_opts)
-            raise
+    clean_key = (os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY).strip().strip('"').strip("'")
+
+    if not clean_key:
+        print("\n[!] AUTHENTICATION ERROR:")
+        print("GEMINI_API_KEY environment variable is not set.")
+        print("Please set your Gemini Developer API Key in your .env file or environment:\n")
+        print("   GEMINI_API_KEY=your_gemini_api_key_here\n")
+        sys.exit(1)
 
     print("[*] Authenticating with Gemini Developer API Key...")
-    return genai.Client(api_key=GEMINI_API_KEY, http_options=http_opts)
+    return genai.Client(api_key=clean_key, http_options=http_opts)
 
 # Telegram Configuration
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip().strip('"').strip("'")
+TELEGRAM_CHAT_ID = (os.getenv("TELEGRAM_CHAT_ID") or "").strip().strip('"').strip("'")
 TELEGRAM_TIMEOUT = int(os.getenv("TELEGRAM_TIMEOUT", "35"))
 TELEGRAM_RETRIES = int(os.getenv("TELEGRAM_RETRIES", "3"))
 TELEGRAM_ENABLED = os.getenv("TELEGRAM_ENABLED", "true").lower() in ("true", "1", "yes")
@@ -88,9 +81,9 @@ PODCAST_VOICE_NAME = os.getenv("PODCAST_VOICE_NAME", "es-US-Chirp-HD-O")  # High
 PODCAST_MAX_DURATION_MINUTES = 5
 PODCAST_FORMAT = "monologue"
 
-# Model Configuration (Standard Vertex AI and Gemini API compatible models)
-GEMINI_RESEARCH_MODEL = os.getenv("GEMINI_RESEARCH_MODEL", "gemini-2.5-flash")
-GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash")
+# Model Configuration (Gemini API models)
+GEMINI_RESEARCH_MODEL = os.getenv("GEMINI_RESEARCH_MODEL", "gemini-3.7-flash")
+GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_DEFAULT_MODEL", "gemini-3.7-flash")
 MAX_API_RETRIES = 2
 
 # Research Tracks for Multi-Track Discovery

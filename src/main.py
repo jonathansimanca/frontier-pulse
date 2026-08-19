@@ -15,6 +15,7 @@ from src.config import (
     TELEGRAM_CHAT_ID,
     TELEGRAM_ENABLED,
     get_edition_dir,
+    get_current_edition_date,
 )
 from src.manifest_manager import (
     create_or_load_manifest,
@@ -29,8 +30,8 @@ def run_pipeline():
     print("   FRONTIER PULSE - AUTOMATED PODCAST GENERATOR")
     print("=" * 65)
 
-    # Step 0: Load manifest and perform startup validation
-    edition_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # Step 0: Load manifest and perform startup validation (America/Bogota timezone)
+    edition_date = get_current_edition_date()
     manifest = create_or_load_manifest(edition_date)
     skip_telegram = "--skip-telegram" in sys.argv or not TELEGRAM_ENABLED
 
@@ -108,7 +109,7 @@ def run_pipeline():
             es_script_path = Path(es_script_str)
             en_script_path = Path(en_script_str)
         else:
-            es_script_path, en_script_path = generate_podcast_script()
+            es_script_path, en_script_path = generate_podcast_script(news_data=news_data)
             update_manifest_stage(
                 manifest,
                 "scripted",
