@@ -438,19 +438,19 @@ def research_ai_news(edition_date: str = None) -> dict:
                 print(f"       [+] {prefix} Discovered {len(track_items)} candidates in track '{track_key}'")
                 raw_candidates_pool.extend(track_items)
                 track_success = True
-                # Pacing between track queries to avoid Gemini API RPM exhaustion
-                time.sleep(3)
+                # Safe pacing between track queries to protect Google Search Grounding RPM
+                time.sleep(4)
                 break
             except Exception as e:
                 err_summary = str(e).split("\n")[0][:120]
                 print(f"       [!] Track '{track_key}' attempt {attempt_idx}/{max_attempts} ({curr_model}) failed: {err_summary}")
-                # Exponential backoff on rate limits / quota exhaustion
-                if "429" in err_summary or "RESOURCE_EXHAUSTED" in err_summary:
-                    sleep_time = 5 * attempt_idx
-                    print(f"       [*] Rate limit hit. Waiting {sleep_time}s before retry with fallback model...")
+                # Exponential backoff on rate limits / quota exhaustion / temporary spikes
+                if any(err in err_summary for err in ["429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"]):
+                    sleep_time = 6 * attempt_idx
+                    print(f"       [*] Rate limit or demand spike detected. Waiting {sleep_time}s before retry with fallback model...")
                     time.sleep(sleep_time)
                 else:
-                    time.sleep(2)
+                    time.sleep(3)
 
         if not track_success:
             print(f"       [!] Track '{track_key}' failed all {max_attempts} attempts. Skipping track.")

@@ -88,38 +88,67 @@ MAX_API_RETRIES = 2
 
 # Research Tracks for Multi-Track Discovery
 RESEARCH_TRACKS = {
+    # 1. Major Frontier Labs & Flagship Foundation Models
     "frontier_labs": [
-        "Google Gemini DeepMind release announcement",
-        "OpenAI GPT launch model update announcement",
-        "Anthropic Claude release update",
-        "DeepSeek model reasoning release",
-        "Meta Llama release open weights",
-        "xAI Grok release update",
+        "Google Gemini DeepMind release announcement updates",
+        "OpenAI GPT o1 o3 reasoning model launch updates",
+        "Anthropic Claude release Sonnet Opus Haiku updates",
+        "DeepSeek AI model release reasoning V3 R1",
+        "xAI Grok release announcement supercluster",
+        "Mistral AI model release Le Chat updates",
     ],
+
+    # 2. Autonomous Agents, Coding Systems & Protocol Standards
     "agentic_and_dev": [
-        "AI coding agents benchmark autonomous tools",
-        "Computer Use autonomous agent API frameworks",
-        "Developer tools API SDK Gemini Claude OpenAI",
+        "Autonomous AI coding agents SWE-bench benchmarks Cursor Devin Windsurf",
+        "Computer Use GUI browser autonomous agent framework",
+        "Model Context Protocol MCP Agent-to-Agent A2A protocol SDK",
+        "OpenAI Anthropic Gemini Realtime Live API developer tooling",
     ],
+
+    # 3. Open-Weights, Global LLMs & Efficient On-Device Inference
+    "open_source_and_global": [
+        "Meta Llama open weights model release benchmark",
+        "Alibaba Qwen QwQ reasoning model open release",
+        "Moonshot Kimi Zhipu GLM 01.AI open LLM release",
+        "Hugging Face open source models trending leaderboard",
+        "Local LLM inference vLLM SGLang Ollama on-device SLM Apple Intelligence",
+    ],
+
+    # 4. Multimodal Generation & World Models (Video, Voice, 3D)
+    "multimodal_and_creative": [
+        "AI video generation Sora Veo Runway Kling Luma Hunyuan",
+        "AI voice audio speech synthesis ElevenLabs Suno Udio",
+        "Vision language multimodal reasoning 3D spatial world models",
+    ],
+
+    # 5. AI Hardware, Chips, Mega-Clusters & Datacenter Energy
     "infrastructure_and_hardware": [
-        "AI hardware chips Cerebras Nvidia Groq datacenter",
-        "AI lab executive leadership restructuring valuation",
+        "Nvidia Blackwell Rubin GPU AI hardware architecture",
+        "Custom AI chips Cerebras Groq Google TPU AWS Trainium",
+        "AI datacenter energy nuclear power gigawatt compute infrastructure",
+        "Frontier AI lab executive leadership restructuring acquisition valuation",
     ],
-    "open_source": [
-        "Open source LLM weights release HuggingFace Qwen Kimi DeepSeek",
+
+    # 6. Evaluation Benchmarks, Safety, Security & Governance
+    "benchmarks_safety_and_policy": [
+        "LMSYS Chatbot Arena LiveBench ARC-AGI benchmark leaderboard",
+        "AI safety alignment reasoning jailbreak prompt injection defense",
+        "AI regulation policy US AISI UK AISI EU AI Act compliance",
     ],
 }
 
 # Clean consolidated priority topics
 PRIORITY_TOPICS = [
-    "Google Gemini & DeepMind",
-    "OpenAI & GPT models",
-    "Anthropic & Claude",
-    "DeepSeek & Open-Weight Reasoning Models",
-    "Meta Llama & Open-Source LLMs (Qwen, Kimi)",
-    "Autonomous AI Agents, Coding & Computer Use",
-    "AI Hardware & Infrastructure (Cerebras, Groq, Nvidia)",
-    "AI Security & Governance",
+    "Google DeepMind & Gemini Ecosystem (Astra, Veo, Gemma, AlphaFold)",
+    "OpenAI & Frontier Reasoning (GPT, o-series, Operator, Sora)",
+    "Anthropic & Claude Ecosystem (Computer Use, Artifacts, Tool-Use)",
+    "DeepSeek & Open Reasoning Architecture (V3, R1, MoE Innovations)",
+    "Meta AI & Open-Source Global Frontier (Llama, Qwen, Kimi, Mistral)",
+    "Autonomous AI Agents, Coding Engines & Protocols (MCP, SWE-bench, Devin, Cursor)",
+    "Generative Multimodal Media (Video World Models, Voice Synthesis, Vision-Language)",
+    "AI Hardware, Acceleration & Clusters (Nvidia, Cerebras, Groq, TPU, Trainium, Datacenters)",
+    "AI Safety, Alignment, Benchmarks & Global Governance (LMSYS Arena, AISI, Regulation)",
 ]
 
 # Source domain filtering
@@ -133,16 +162,28 @@ BLOCKED_DOMAINS = [
 ]
 
 AUTHORITATIVE_DOMAINS = [
+    # Official AI Labs
     "blog.google",
     "deepmind.google",
     "openai.com",
     "anthropic.com",
     "deepseek.com",
+    "x.ai",
+    "mistral.ai",
+    "ai.meta.com",
+    "huggingface.co",
+    "cerebras.ai",
+    "groq.com",
+    "together.ai",
+    # Authoritative Tech & Hardware Outlets
     "techcrunch.com",
     "theverge.com",
     "arstechnica.com",
     "reuters.com",
     "venturebeat.com",
-    "huggingface.co",
     "wired.com",
+    "technologyreview.com",
+    "theinformation.com",
+    "semianalysis.com",
+    "siliconangle.com",
 ]
