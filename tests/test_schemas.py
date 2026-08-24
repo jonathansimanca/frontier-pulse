@@ -161,3 +161,55 @@ def test_ranked_news_item_validation():
     with pytest.raises(ValidationError):
         NewsItem.model_validate(bad_item_data)
 
+
+def test_visual_asset_manifest_validation():
+    """Test that VisualAssetManifest validates correctly with cover and insight cards."""
+    from src.schemas import VisualAssetManifest, VisualAssetItem, CoverCardText, InsightCardText
+
+    manifest_data = {
+        "episode_number": 4,
+        "edition_date": "2026-08-24",
+        "assets": [
+            {
+                "file": "episode-4-01-cover.png",
+                "type": "cover",
+                "display_order": 1,
+                "suggested_screen_time_seconds": 3,
+                "text": {
+                    "series": "FRONTIER PULSE",
+                    "format": "PODCAST SEMANAL DE NOTICIAS DE IA",
+                    "headline": "3 avances de IA que debes entender esta semana",
+                    "metadata": "Episodio 4 · 4 min",
+                    "cta": "▶ Escuchar ahora"
+                }
+            },
+            {
+                "file": "episode-4-02-insight-enterprise-agents.png",
+                "type": "news_insight",
+                "display_order": 2,
+                "suggested_screen_time_seconds": 5,
+                "text": {
+                    "label": "ESTA SEMANA EN IA",
+                    "title": "Los agentes empresariales se vuelven más autónomos",
+                    "key_fact": "OpenAI confirmó su modelo Astra capaz de resolver problemas complejos.",
+                    "why_it_matters": "POR QUÉ IMPORTA: Acelera la automatización en entornos de producción.",
+                    "footer": "FRONTIER PULSE · EPISODIO 4"
+                },
+                "source_reference": "https://openai.com/news"
+            }
+        ]
+    }
+
+    manifest = VisualAssetManifest.model_validate(manifest_data)
+    assert manifest.episode_number == 4
+    assert len(manifest.assets) == 2
+    assert manifest.assets[0].type == "cover"
+    assert manifest.assets[1].type == "news_insight"
+    assert manifest.assets[1].source_reference == "https://openai.com/news"
+
+    # Test that fewer than 2 assets or more than 3 assets triggers validation error
+    too_few_data = manifest_data.copy()
+    too_few_data["assets"] = [manifest_data["assets"][0]]
+    with pytest.raises(ValidationError):
+        VisualAssetManifest.model_validate(too_few_data)
+

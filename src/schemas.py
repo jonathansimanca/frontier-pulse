@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic import BaseModel, Field, HttpUrl
 
 class SourceReference(BaseModel):
@@ -140,4 +140,35 @@ class EditorialQualityReport(BaseModel):
     slow_week_adjustment: bool = False
     reasons_for_failure: List[str] = Field(default_factory=list)
     validated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CoverCardText(BaseModel):
+    series: str = Field(default="FRONTIER PULSE", description="Top series label")
+    format: str = Field(default="WEEKLY AI NEWS PODCAST", description="Supporting format label")
+    headline: str = Field(description="Benefit-led main headline (max 10 words)")
+    metadata: str = Field(description="Metadata line, e.g., 'Episode 4 · 4 min'")
+    cta: str = Field(default="▶ Listen now", description="Call to action line")
+
+
+class InsightCardText(BaseModel):
+    label: str = Field(default="THIS WEEK IN AI", description="Top topic label")
+    title: str = Field(description="Plain-language headline for the story (max 9 words)")
+    key_fact: str = Field(description="One verifiable sentence describing what happened (max 20 words)")
+    why_it_matters: str = Field(description="Short practical implication (max 16 words)")
+    footer: str = Field(description="Footer line, e.g., 'FRONTIER PULSE · EPISODE 4'")
+
+
+class VisualAssetItem(BaseModel):
+    file: str = Field(description="Filename of the generated PNG asset (e.g. episode-4-01-cover.png)")
+    type: str = Field(description="Type of asset: 'cover' or 'news_insight'")
+    display_order: int = Field(description="1-based suggested display order")
+    suggested_screen_time_seconds: int = Field(default=3, description="Recommended display duration in seconds")
+    text: Union[CoverCardText, InsightCardText, dict] = Field(description="Structured text layout data")
+    source_reference: Optional[str] = Field(None, description="URL or source reference for news insight cards")
+
+
+class VisualAssetManifest(BaseModel):
+    episode_number: int = Field(description="Sequential episode number")
+    edition_date: Optional[str] = Field(None, description="Target edition date in YYYY-MM-DD format")
+    assets: List[VisualAssetItem] = Field(min_length=2, max_length=3, description="List of 2 to 3 visual assets")
 

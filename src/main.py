@@ -8,6 +8,7 @@ from src.quality_gate import validate_edition_quality
 from src.script_generator import generate_podcast_script
 from src.audio_generator import load_spanish_script, synthesize_speech
 from src.image_generator import generate_podcast_cover
+from src.visual_asset_generator import generate_visual_assets
 from src.telegram_publisher import publish_to_telegram
 
 from src.config import (
@@ -140,21 +141,50 @@ def run_pipeline():
                 }
             )
 
-        # Step 3.5: Generate Podcast Cover Image (Nano Banana)
-        print("\n--- STEP 3.5: Generating Podcast Cover Art ---")
+        # Step 3.5: Generate Visual Assets (1080x1350 mobile video cards + manifest)
+        print("\n--- STEP 3.5: Generating Visual Assets for Video & Cover ---")
         cover_file_str = manifest.artifacts.get("cover_image")
+        assets_manifest_str = manifest.artifacts.get("visual_assets_manifest")
         has_cover = cover_file_str and Path(cover_file_str).exists()
-        
-        if has_cover and manifest.last_successful_stage not in [None, "created", "researched", "scripted", "audio_ready"]:
-            print(f"[+] Resuming: Cover image already generated: {cover_file_str}")
+        has_assets_manifest = assets_manifest_str and Path(assets_manifest_str).exists()
+
+        if has_cover and has_assets_manifest and manifest.last_successful_stage not in [None, "created", "researched", "scripted", "audio_ready"]:
+            print(f"[+] Resuming: Visual assets already generated: {cover_file_str}")
             cover_path = Path(cover_file_str)
         else:
-            cover_path = generate_podcast_cover(news_data, edition_date)
-            if cover_path:
-                manifest.artifacts["cover_image"] = str(cover_path.resolve())
+            try:
+                # Approximate duration in minutes based on audio file size if present
+                audio_dur = 4
+                if "audio_file" in manifest.artifacts and Path(manifest.artifacts["audio_file"]).exists():
+                    try:
+                        audio_dur = max(3, min(6, int(Path(manifest.artifacts["audio_file"]).stat().st_size / (16000 * 2 * 60)))) or 4
+                    except Exception:
+                        audio_dur = 4
+
+                v_manifest, file_paths = generate_visual_assets(
+                    news_data=news_data,
+                    edition_date=edition_date,
+                    audio_duration_minutes=audio_dur
+                )
+                cover_path = file_paths.get("cover")
+                if cover_path:
+                    manifest.artifacts["cover_image"] = str(cover_path.resolve())
+                if "assets_manifest" in file_paths:
+                    manifest.artifacts["visual_assets_manifest"] = str(file_paths["assets_manifest"].resolve())
+                manifest.artifacts["visual_assets"] = [
+                    str(p.resolve()) for k, p in file_paths.items() if k.startswith("insight") or k == "cover"
+                ]
                 save_manifest_atomic(manifest)
-            else:
-                print("[!] Warning: Cover image generation failed, continuing pipeline without cover image.")
+                print(f"[+] Visual assets generated successfully ({len(v_manifest.assets)} cards): {manifest.artifacts.get('visual_assets_manifest')}")
+            except Exception as e:
+                print(f"[!] Warning: Visual asset generation encountered an issue ({e}), trying legacy cover fallback...")
+                try:
+                    cover_path = generate_podcast_cover(news_data, edition_date)
+                    if cover_path:
+                        manifest.artifacts["cover_image"] = str(cover_path.resolve())
+                        save_manifest_atomic(manifest)
+                except Exception as legacy_err:
+                    print(f"[!] Warning: Legacy cover also failed ({legacy_err}), continuing pipeline without cover.")
 
         # Step 4: Publish to Telegram (Idempotent delivery)
         print("\n--- STEP 4: Publishing Episode to Telegram ---")
