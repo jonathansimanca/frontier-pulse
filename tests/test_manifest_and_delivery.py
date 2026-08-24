@@ -276,3 +276,31 @@ def test_telegram_token_redaction():
         assert "<REDACTED_TELEGRAM_TOKEN>" in sanitized
 
 
+@patch("src.telegram_publisher.requests.post")
+@patch("src.telegram_publisher.TELEGRAM_BOT_TOKEN", "mock-token")
+@patch("src.telegram_publisher.TELEGRAM_CHAT_ID", "mock-chat")
+def test_send_telegram_media_group(mock_post, tmp_path):
+    """Verify that multiple visual cards are posted via sendMediaGroup."""
+    from src.telegram_publisher import send_telegram_media_group
+
+    img1 = tmp_path / "card1.png"
+    img1.write_bytes(b"dummy image 1")
+    img2 = tmp_path / "card2.png"
+    img2.write_bytes(b"dummy image 2")
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "ok": True,
+        "result": [{"message_id": 101}, {"message_id": 102}]
+    }
+    mock_resp.raise_for_status = MagicMock()
+    mock_post.return_value = mock_resp
+
+    msg_ids = send_telegram_media_group([img1, img2], caption="Test Album")
+    assert msg_ids == [101, 102]
+    assert mock_post.call_count == 1
+    call_args = mock_post.call_args
+    assert "sendMediaGroup" in call_args[0][0]
+    assert call_args[1]["data"]["chat_id"] == "mock-chat"
+
+

@@ -200,8 +200,85 @@ def send_telegram_photo(photo_path: Path, caption: str = "🎙 New Frontier Puls
     return None
 
 
+def send_telegram_media_group(
+    photo_paths: list[Path],
+    caption: str = "🎨 *Frontier Pulse Visual Cards*"
+) -> list[int] | None:
+    """Upload multiple photos as an album (media group) to Telegram chat via Bot API.
+    
+    Returns list of message IDs on success, or None on failure.
+    """
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return None
+
+    valid_paths = [p for p in photo_paths if p.exists()]
+    if not valid_paths:
+        print("[!] No valid photo files found for Telegram media group upload.")
+        return None
+
+    if len(valid_paths) == 1:
+        msg_id = send_telegram_photo(valid_paths[0], caption=caption)
+        return [msg_id] if msg_id else None
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMediaGroup"
+    proxies = _get_request_proxies()
+
+    media_array = []
+    for idx, path in enumerate(valid_paths):
+        item = {
+            "type": "photo",
+            "media": f"attach://photo_{idx}",
+        }
+        if idx == 0:
+            item["caption"] = caption
+            item["parse_mode"] = "Markdown"
+        media_array.append(item)
+
+    print(f"[*] Uploading {len(valid_paths)} visual cards to Telegram as media group album...")
+    for attempt in range(1, TELEGRAM_RETRIES + 1):
+        file_handles = []
+        try:
+            files = {}
+            for idx, path in enumerate(valid_paths):
+                fh = open(path, "rb")
+                file_handles.append(fh)
+                files[f"photo_{idx}"] = (path.name, fh, "image/png")
+
+            data = {
+                "chat_id": TELEGRAM_CHAT_ID,
+                "media": json.dumps(media_array),
+            }
+
+            response = requests.post(
+                url,
+                data=data,
+                files=files,
+                timeout=max(60, TELEGRAM_TIMEOUT),
+                proxies=proxies
+            )
+            response.raise_for_status()
+            res_data = response.json()
+            results = res_data.get("result", [])
+            msg_ids = [r.get("message_id") for r in results if "message_id" in r]
+            print(f"[+] Telegram media group ({len(msg_ids)} cards) published successfully!")
+            return msg_ids
+        except requests.exceptions.RequestException as e:
+            sanitized_err = sanitize_error_message(str(e))
+            print(f"[!] Telegram media group attempt {attempt}/{TELEGRAM_RETRIES} failed: {sanitized_err}")
+            if attempt < TELEGRAM_RETRIES:
+                time.sleep(2 * attempt)
+        finally:
+            for fh in file_handles:
+                try:
+                    fh.close()
+                except Exception:
+                    pass
+
+    return None
+
+
 def publish_to_telegram(manifest: EditionManifest = None) -> bool:
-    """Main function to format news summary and publish both message and MP3 audio to Telegram idempotently."""
+    """Main function to format news summary and publish message, visual cards, and MP3 audio to Telegram idempotently."""
     try:
         news_data = load_current_news()
     except Exception as e:
@@ -247,28 +324,42 @@ def publish_to_telegram(manifest: EditionManifest = None) -> bool:
     else:
         print("[*] Telegram text summary already delivered. Skipping (idempotent).")
 
-    # 2.5 Publish Cover Art Image (if exists and not already delivered)
-    image_path_str = manifest.artifacts.get("cover_image")
-    image_path = Path(image_path_str) if image_path_str else (get_edition_dir(edition_date) / "podcast_cover.jpg")
-    if not image_path.exists():
-        image_path = OUTPUT_DIR / "podcast_cover.jpg"
+    # 2.5 Publish Visual Cards (Media Group / Album) (if exists and not already delivered)
+    cards_to_send: list[Path] = []
+    raw_visual_assets = manifest.artifacts.get("visual_assets")
+    if raw_visual_assets and isinstance(raw_visual_assets, list):
+        for p_str in raw_visual_assets:
+            p = Path(p_str)
+            if p.exists() and p not in cards_to_send:
+                cards_to_send.append(p)
 
-    if image_path.exists():
+    if not cards_to_send:
+        # Fallback: check cover_image or scan edition directory
+        image_path_str = manifest.artifacts.get("cover_image")
+        if image_path_str and Path(image_path_str).exists():
+            cards_to_send.append(Path(image_path_str))
+        else:
+            edition_dir = get_edition_dir(edition_date)
+            found_cards = sorted(list(edition_dir.glob("episode-*-*.png")))
+            if found_cards:
+                cards_to_send.extend(found_cards)
+
+    if cards_to_send:
         if not manifest.delivery_state.image_delivered:
-            msg_id = send_telegram_photo(
-                photo_path=image_path,
-                caption=f"🎨 *Frontier Pulse Cover Art ({edition_date})*"
+            msg_ids = send_telegram_media_group(
+                photo_paths=cards_to_send,
+                caption=f"🎨 *Frontier Pulse — Visual Cards ({edition_date})*"
             )
-            if msg_id is not None:
+            if msg_ids:
                 manifest.delivery_state.image_delivered = True
-                manifest.delivery_state.telegram_image_message_id = msg_id
+                manifest.delivery_state.telegram_image_message_id = msg_ids[0]
                 save_manifest_atomic(manifest)
             else:
-                print("[!] Warning: Failed to send Telegram cover art. Proceeding with other assets.")
+                print("[!] Warning: Failed to send Telegram visual cards. Proceeding with other assets.")
         else:
-            print("[*] Telegram cover art already delivered. Skipping (idempotent).")
+            print("[*] Telegram visual cards already delivered. Skipping (idempotent).")
     else:
-        print("[*] No cover art image found to publish.")
+        print("[*] No visual card images found to publish.")
 
     # 3. Publish Audio Episode MP3 (if not already delivered)
     if not manifest.delivery_state.audio_delivered:
