@@ -172,7 +172,7 @@ def run_pipeline():
                 if "assets_manifest" in file_paths:
                     manifest.artifacts["visual_assets_manifest"] = str(file_paths["assets_manifest"].resolve())
                 manifest.artifacts["visual_assets"] = [
-                    str(p.resolve()) for k, p in file_paths.items() if k.startswith("insight") or k == "cover"
+                    str(p.resolve()) for k, p in file_paths.items() if k in ["cover", "insight_a", "insight_b", "roundup"]
                 ]
                 save_manifest_atomic(manifest)
                 print(f"[+] Visual assets generated successfully ({len(v_manifest.assets)} cards): {manifest.artifacts.get('visual_assets_manifest')}")

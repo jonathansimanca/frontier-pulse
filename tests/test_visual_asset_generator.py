@@ -1,6 +1,15 @@
+"""Unit tests for Visual Asset Generator (4-Card Editorial Earth Tactile System)."""
+
 import pytest
+import json
 from PIL import Image
-from src.schemas import CoverCardText, InsightCardText
+from src.schemas import (
+    CoverCardText,
+    InsightCardText,
+    EditionContextCardText,
+    RoundupCardText,
+    VisualAssetManifest,
+)
 from src.visual_asset_generator import (
     CANVAS_WIDTH,
     CANVAS_HEIGHT,
@@ -11,6 +20,12 @@ from src.visual_asset_generator import (
     create_base_gradient_background,
     render_cover_card,
     render_insight_card,
+    render_context_card,
+    render_roundup_card,
+    generate_visual_assets,
+    get_episode_number,
+    slugify,
+    clamp_words,
 )
 
 
@@ -33,7 +48,6 @@ def test_wrap_text():
     lines = wrap_text(long_text, font, max_width=400, draw=draw)
 
     assert len(lines) > 1
-    # Check that reconstructed text contains all original words in order
     reconstructed = " ".join(lines)
     assert reconstructed == long_text
 
@@ -42,13 +56,13 @@ def test_render_cover_card_dimensions_and_mode():
     """Verify AR-01 Cover Card renders to 1080x1350 RGB image."""
     cover_data = CoverCardText(
         series="FRONTIER PULSE",
-        format="PODCAST SEMANAL DE NOTICIAS DE IA",
-        headline="3 avances de IA que debes entender esta semana",
+        format="PODCAST SEMANAL DE IA",
+        headline="3 avances de IA clave esta semana",
         metadata="Episodio 4 · 4 min",
         cta="▶ Escuchar ahora"
     )
 
-    img = render_cover_card(cover_data)
+    img = render_cover_card(cover_data, scene_mode="analyst")
     assert img.size == (1080, 1350)
     assert img.mode == "RGB"
 
@@ -58,13 +72,13 @@ def test_render_cover_card_with_background():
     bg_img = Image.new("RGB", (800, 1000), (40, 20, 60))
     cover_data = CoverCardText(
         series="FRONTIER PULSE",
-        format="WEEKLY AI NEWS PODCAST",
-        headline="Major AI breakthroughs shaping software engineering this week",
-        metadata="Episode 4 · 5 min",
-        cta="▶ Listen now"
+        format="PODCAST SEMANAL DE IA",
+        headline="Avances de IA de alto impacto",
+        metadata="Episodio 4 · 5 min",
+        cta="▶ Escuchar ahora"
     )
 
-    img = render_cover_card(cover_data, background_image=bg_img)
+    img = render_cover_card(cover_data, background_image=bg_img, scene_mode="builder")
     assert img.size == (1080, 1350)
     assert img.mode == "RGB"
 
@@ -79,15 +93,46 @@ def test_render_insight_card_dimensions_and_mode():
         footer="FRONTIER PULSE · EPISODIO 4"
     )
 
-    img = render_insight_card(insight_data)
+    img = render_insight_card(insight_data, scene_mode="orchestrator")
+    assert img.size == (1080, 1350)
+    assert img.mode == "RGB"
+
+
+def test_render_context_card_fallback():
+    """Verify AR-03 Fallback Context Card renders cleanly to 1080x1350 RGB image."""
+    ctx_data = EditionContextCardText(
+        label="CONTEXTO DE LA EDICIÓN",
+        title="Panorama y contexto estratégico semanal",
+        context_text="Análisis integral de señales y avances en la frontera de inteligencia artificial.",
+        cta="▶ Escucha el episodio completo",
+        footer="FRONTIER PULSE · EPISODIO 4"
+    )
+    img = render_context_card(ctx_data, scene_mode="analyst")
+    assert img.size == (1080, 1350)
+    assert img.mode == "RGB"
+
+
+def test_render_roundup_card_dimensions_and_mode():
+    """Verify AR-04 Closing Radar Card renders to 1080x1350 RGB image."""
+    roundup_data = RoundupCardText(
+        label="RADAR DE CIERRE",
+        headline="Más señales que debes tener en el radar",
+        remaining_titles=[
+            "Avances en chips neuronales",
+            "Nuevas regulaciones de seguridad",
+            "Alianza de robótica abierta"
+        ],
+        cta="Escucha el episodio completo",
+        footer="FRONTIER PULSE · EPISODIO 4"
+    )
+
+    img = render_roundup_card(roundup_data)
     assert img.size == (1080, 1350)
     assert img.mode == "RGB"
 
 
 def test_slugify_and_clamp_words():
     """Verify slugify and word clamping helper functions."""
-    from src.visual_asset_generator import slugify, clamp_words
-
     assert slugify("OpenAI Astra Math Breakthroughs") == "openai-astra-math"
     assert slugify("Special @#$ Characters!") == "special-characters"
     
@@ -97,85 +142,51 @@ def test_slugify_and_clamp_words():
 
 def test_get_episode_number(monkeypatch):
     """Verify episode number resolution."""
-    from src.visual_asset_generator import get_episode_number
-
-    # Environment variable override
     monkeypatch.setenv("EPISODE_NUMBER", "42")
     assert get_episode_number() == 42
     monkeypatch.delenv("EPISODE_NUMBER")
 
-    # Known dates
     assert get_episode_number("2026-08-05") == 1
     assert get_episode_number("2026-08-12") == 2
     assert get_episode_number("2026-08-18") == 3
     assert get_episode_number("2026-08-24") == 4
 
 
-def test_plan_visual_card_contents_fallback(monkeypatch):
-    """Verify fallback plan generation when Gemini API is not called or fails."""
-    from src.visual_asset_generator import plan_visual_card_contents
-
-    # Force Gemini to fail to test fallback mechanism
-    def mock_failing_client():
-        raise RuntimeError("Forced API client failure for fallback testing")
-
-    monkeypatch.setattr("src.visual_asset_generator.get_genai_client", mock_failing_client)
-
-    sample_news = {
-        "title": "Frontier Pulse - Edición 2026-08-24",
-        "items": [
-            {
-                "id": "openai-astra",
-                "title": "OpenAI Confirms Astra Model and Breakthroughs",
-                "category": "Reasoning Models",
-                "summary": "OpenAI confirmed existence of Astra model solving 10 math problems.",
-                "why_it_matters": "Astra pushes the boundary of autonomous reasoning.",
-                "relevance_score": 5,
-                "sources": [{"title": "OpenAI Blog", "url": "https://openai.com"}]
-            },
-            {
-                "id": "anthropic-breach",
-                "title": "Anthropic Discloses Claude Security Evaluation Results",
-                "category": "AI Security",
-                "summary": "Claude models breached real systems during security testing.",
-                "why_it_matters": "Shows urgent need for sandboxing.",
-                "relevance_score": 5,
-                "sources": [{"title": "Anthropic Post", "url": "https://anthropic.com"}]
-            }
-        ]
-    }
-
-    plan = plan_visual_card_contents(sample_news, episode_number=4, language="es")
-    assert "cover" in plan
-    assert "story_a" in plan
-    assert plan["story_a"]["slug"] == "openai-astra"
-    assert plan["story_a"]["why_it_matters"].startswith("POR QUÉ IMPORTA:")
-    assert plan["include_card_b"] is True
-    assert plan["story_b"]["slug"] == "anthropic-breach"
-
-
 def test_generate_visual_assets_end_to_end(tmp_path, monkeypatch):
-    """Verify end-to-end asset generation writing PNGs and assets.json."""
-    from src.visual_asset_generator import generate_visual_assets
-    import json
-
+    """Verify end-to-end asset generation writing exactly 4 PNGs, JPEG, and assets.json."""
     monkeypatch.setattr("src.visual_asset_generator.get_edition_dir", lambda date: tmp_path)
-    # Mock background generation to avoid external network calls
+    monkeypatch.setattr("src.visual_asset_generator.OUTPUT_DIR", tmp_path)
+    # Mock background generation to avoid external network calls during tests
     monkeypatch.setattr("src.visual_asset_generator.generate_background_artwork", lambda prompt: None)
-    # Force deterministic fallback planning for unit test stability
-    monkeypatch.setattr("src.visual_asset_generator.get_genai_client", lambda: (_ for _ in ()).throw(RuntimeError("offline")))
+    # Force deterministic fallback planning for unit test offline stability
+    monkeypatch.setattr("src.editorial_planner.get_genai_client", lambda: (_ for _ in ()).throw(RuntimeError("offline")))
 
     sample_news = {
         "title": "Frontier Pulse - Edición 2026-08-24",
         "items": [
             {
                 "id": "primary-topic",
-                "title": "Primary breakthrough in AI models",
-                "category": "Core AI",
-                "summary": "Major release of multi-agent capabilities.",
-                "why_it_matters": "Speeds up software development.",
+                "title": "Avance primario en modelos de razonamiento",
+                "category": "Reasoning Models",
+                "summary": "Lanzamiento de capacidades avanzadas de inferencia.",
+                "why_it_matters": "Acelera desarrollo de software.",
                 "relevance_score": 5,
                 "sources": [{"title": "Source 1", "url": "https://example.com"}]
+            },
+            {
+                "id": "secondary-topic",
+                "title": "Nuevos agentes empresariales en producción",
+                "category": "Autonomous Agents",
+                "summary": "Herramientas para despliegue de multi-agentes.",
+                "why_it_matters": "Automatiza flujos críticos.",
+                "relevance_score": 4,
+                "sources": [{"title": "Source 2", "url": "https://example.com/2"}]
+            },
+            {
+                "id": "tertiary-topic",
+                "title": "Chips de baja latencia para inferencia local",
+                "category": "Hardware",
+                "summary": "Reducción de consumo en centros de datos."
             }
         ]
     }
@@ -188,24 +199,39 @@ def test_generate_visual_assets_end_to_end(tmp_path, monkeypatch):
         language="es"
     )
 
-    # Verify manifest
+    # Verify manifest has exactly 4 assets
     assert manifest.episode_number == 4
-    assert len(manifest.assets) >= 2
+    assert len(manifest.assets) == 4
+    assert manifest.assets[0].type == "cover"
+    assert manifest.assets[1].type == "news_insight"
+    assert manifest.assets[2].type == "news_insight"
+    assert manifest.assets[3].type == "news_roundup"
 
     # Verify files on disk
     cover_file = tmp_path / "episode-4-01-cover.png"
     assert cover_file.exists()
-    cover_img = Image.open(cover_file)
-    assert cover_img.size == (1080, 1350)
+    assert Image.open(cover_file).size == (1080, 1350)
 
     insight_a_file = tmp_path / "episode-4-02-insight-primary-topic.png"
     assert insight_a_file.exists()
-    insight_img = Image.open(insight_a_file)
-    assert insight_img.size == (1080, 1350)
+    assert Image.open(insight_a_file).size == (1080, 1350)
 
+    insight_b_file = tmp_path / "episode-4-03-insight-secondary-topic.png"
+    assert insight_b_file.exists()
+    assert Image.open(insight_b_file).size == (1080, 1350)
+
+    roundup_file = tmp_path / "episode-4-04-news-roundup.png"
+    assert roundup_file.exists()
+    assert Image.open(roundup_file).size == (1080, 1350)
+
+    # Legacy cover compatibility
+    jpg_file = tmp_path / "podcast_cover.jpg"
+    assert jpg_file.exists()
+
+    # Manifest file
     manifest_file = tmp_path / "episode-4-assets.json"
     assert manifest_file.exists()
     with open(manifest_file, "r", encoding="utf-8") as f:
         loaded_json = json.load(f)
         assert loaded_json["episode_number"] == 4
-        assert len(loaded_json["assets"]) >= 2
+        assert len(loaded_json["assets"]) == 4
