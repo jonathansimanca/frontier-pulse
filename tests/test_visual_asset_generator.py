@@ -250,3 +250,103 @@ def test_generate_visual_assets_end_to_end(tmp_path, monkeypatch):
         loaded_json = json.load(f)
         assert loaded_json["episode_number"] == 4
         assert len(loaded_json["assets"]) == 4
+
+
+def test_english_single_story_edition_context_card_has_no_spanish(tmp_path, monkeypatch):
+    """Verify that an English single-story edition generates an AR-03 context card with NO Spanish text."""
+    monkeypatch.setattr("src.visual_asset_generator.get_edition_dir", lambda date: tmp_path)
+    monkeypatch.setattr("src.visual_asset_generator.OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("src.visual_asset_generator.generate_background_artwork", lambda prompt: None)
+    monkeypatch.setattr("src.editorial_planner.get_genai_client", lambda: (_ for _ in ()).throw(RuntimeError("offline")))
+
+    single_story_news = {
+        "title": "Frontier Pulse - Edition 2026-08-24",
+        "items": [
+            {
+                "id": "single-breakthrough",
+                "title": "Major Breakthrough in Autonomous AI Systems",
+                "category": "Autonomous Agents",
+                "summary": "Engineering teams deploy scalable agentic architectures.",
+                "why_it_matters": "Dramatically improves reliability in automated pipelines.",
+                "relevance_score": 5,
+                "sources": [{"title": "Source 1", "url": "https://example.com"}]
+            }
+        ]
+    }
+
+    manifest, file_paths = generate_visual_assets(
+        news_data=single_story_news,
+        edition_date="2026-08-24",
+        episode_number=4,
+        audio_duration_minutes=4,
+        language="en"
+    )
+
+    assert len(manifest.assets) == 4
+    context_card_asset = manifest.assets[2]
+    assert context_card_asset.type == "edition_context"
+
+    # Verify context text model fields contain NO Spanish words
+    spanish_indicators = ["POR QUÉ IMPORTA", "EDICIÓN", "EPISODIO", "ESCUCHAR", "SEMANAL", "HECHO CLAVE"]
+    text_data = context_card_asset.text
+
+    assert "EDITION CONTEXT" in text_data.label
+    assert "EPISODE 4" in text_data.footer
+    assert "Listen" in text_data.cta
+
+    for spanish_word in spanish_indicators:
+        assert spanish_word not in text_data.label
+        assert spanish_word not in text_data.title
+        assert spanish_word not in text_data.context_text
+        assert spanish_word not in text_data.cta
+        assert spanish_word not in text_data.footer
+
+    # Also directly verify render_context_card with language="en"
+    rendered_img = render_context_card(text_data, language="en")
+    assert rendered_img.size == (1080, 1350)
+
+
+def test_renderers_enforce_contrast_validation_and_reject_invalid_colors():
+    """Verify that every renderer preflights color pairs and raises ValueError on invalid contrast."""
+    cover_data = CoverCardText(
+        series="FRONTIER PULSE",
+        format="WEEKLY AI PODCAST",
+        headline="Valid Headline",
+        metadata="Episode 4 · 4 min",
+        cta="▶ Listen now"
+    )
+
+    # 1. Cover card with invalid low-contrast headline (dark gray text on dark surface)
+    with pytest.raises(ValueError, match="Contrast validation failed for 'cover_headline'"):
+        render_cover_card(cover_data, color_overrides={"headline_fg": (38, 34, 30)})
+
+    # 2. Cover card with invalid low-contrast CTA text
+    with pytest.raises(ValueError, match="Contrast validation failed for 'cover_cta'"):
+        render_cover_card(cover_data, color_overrides={"cta_fg": (195, 75, 45)})
+
+    # 3. Insight card with invalid low-contrast key fact body text
+    insight_data = InsightCardText(
+        label="THIS WEEK IN AI",
+        title="Autonomous Systems at Scale",
+        key_fact="Key fact text here.",
+        why_it_matters="WHY IT MATTERS: High impact significance.",
+        footer="FRONTIER PULSE · EPISODE 4"
+    )
+    with pytest.raises(ValueError, match="Contrast validation failed for 'insight_key_fact_body'"):
+        render_insight_card(insight_data, color_overrides={"key_fact_body_fg": (40, 36, 32)})
+
+    # 4. Insight card with invalid low-contrast label badge
+    with pytest.raises(ValueError, match="Contrast validation failed for 'insight_label'"):
+        render_insight_card(insight_data, color_overrides={"label_fg": (120, 140, 120)})
+
+    # 5. Roundup card with invalid low-contrast story rows
+    roundup_data = RoundupCardText(
+        label="RADAR",
+        headline="Signals in AI",
+        remaining_titles=["Item 1", "Item 2"],
+        cta="Listen to full episode",
+        footer="FRONTIER PULSE · EPISODE 4"
+    )
+    with pytest.raises(ValueError, match="Contrast validation failed for 'roundup_story_rows'"):
+        render_roundup_card(roundup_data, color_overrides={"row_title_fg": (36, 32, 29)})
+

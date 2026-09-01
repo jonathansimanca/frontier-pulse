@@ -58,6 +58,7 @@ from src.visual_theme import (
     get_font,
     wrap_text,
     validate_contrast_by_role,
+    assert_render_contrast,
 )
 from src.pulse_character import (
     composite_pulse_on_canvas,
@@ -165,12 +166,94 @@ def apply_dark_scrim(canvas: Image.Image, bottom_scrim_height: int = 700) -> Ima
     return Image.alpha_composite(canvas, scrim)
 
 
+def validate_cover_card_contrast(
+    series_badge_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    series_badge_bg: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+    format_fg: Tuple[int, int, int] = COLOR_TEXT_SAND,
+    format_bg: Tuple[int, int, int] = COLOR_BG_CHARCOAL,
+    headline_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    headline_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    meta_fg: Tuple[int, int, int] = COLOR_TEXT_SAND,
+    meta_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    cta_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    cta_bg: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+) -> None:
+    """Preflight contrast validation for all foreground/background color pairs in the cover card."""
+    assert_render_contrast(series_badge_fg, series_badge_bg, role="large_bold", font_size=FONT_SIZE_BODY, is_bold=True, element_name="cover_series_badge")
+    assert_render_contrast(format_fg, format_bg, role="label", font_size=FONT_SIZE_LABEL, is_bold=False, element_name="cover_format_text")
+    assert_render_contrast(headline_fg, headline_bg, role="large_bold", font_size=FONT_SIZE_COVER_HEADLINE, is_bold=True, element_name="cover_headline")
+    assert_render_contrast(meta_fg, meta_bg, role="body", font_size=FONT_SIZE_META, is_bold=False, element_name="cover_metadata")
+    assert_render_contrast(cta_fg, cta_bg, role="cta", font_size=FONT_SIZE_CTA, is_bold=True, element_name="cover_cta")
+
+
+def validate_insight_card_contrast(
+    label_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    label_bg: Tuple[int, int, int] = COLOR_ACCENT_SAGE,
+    headline_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    headline_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    key_fact_label_fg: Tuple[int, int, int] = COLOR_TEXT_SAND,
+    key_fact_label_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    key_fact_body_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    key_fact_body_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    why_prefix_fg: Tuple[int, int, int] = COLOR_ACCENT_APRICOT,
+    why_prefix_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    why_body_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    why_body_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    footer_fg: Tuple[int, int, int] = COLOR_TEXT_SAND,
+    footer_bg: Tuple[int, int, int] = COLOR_BG_CHARCOAL,
+) -> None:
+    """Preflight contrast validation for all foreground/background color pairs in the insight card."""
+    assert_render_contrast(label_fg, label_bg, role="label", font_size=FONT_SIZE_LABEL, is_bold=True, element_name="insight_label")
+    assert_render_contrast(headline_fg, headline_bg, role="large_bold", font_size=FONT_SIZE_INSIGHT_HEADLINE, is_bold=True, element_name="insight_headline")
+    assert_render_contrast(key_fact_label_fg, key_fact_label_bg, role="label", font_size=FONT_SIZE_LABEL, is_bold=True, element_name="insight_key_fact_label")
+    assert_render_contrast(key_fact_body_fg, key_fact_body_bg, role="body", font_size=FONT_SIZE_BODY, is_bold=False, element_name="insight_key_fact_body")
+    assert_render_contrast(why_prefix_fg, why_prefix_bg, role="body", font_size=FONT_SIZE_BODY, is_bold=True, element_name="insight_why_prefix")
+    assert_render_contrast(why_body_fg, why_body_bg, role="body", font_size=FONT_SIZE_BODY, is_bold=False, element_name="insight_why_body")
+    assert_render_contrast(footer_fg, footer_bg, role="body", font_size=FONT_SIZE_FOOTER, is_bold=True, element_name="insight_footer")
+
+
+def validate_roundup_card_contrast(
+    label_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    label_bg: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+    headline_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    headline_bg: Tuple[int, int, int] = COLOR_BG_CHARCOAL,
+    row_title_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    row_title_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    row_num_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    row_num_bg: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+    cta_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    cta_bg: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+    footer_fg: Tuple[int, int, int] = COLOR_TEXT_SAND,
+    footer_bg: Tuple[int, int, int] = COLOR_BG_CHARCOAL,
+) -> None:
+    """Preflight contrast validation for all foreground/background color pairs in the roundup card."""
+    assert_render_contrast(label_fg, label_bg, role="label", font_size=FONT_SIZE_LABEL, is_bold=True, element_name="roundup_label")
+    assert_render_contrast(headline_fg, headline_bg, role="large_bold", font_size=FONT_SIZE_ROUNDUP_HEADLINE, is_bold=True, element_name="roundup_headline")
+    assert_render_contrast(row_title_fg, row_title_bg, role="body", font_size=FONT_SIZE_BODY, is_bold=False, element_name="roundup_story_rows")
+    assert_render_contrast(row_num_fg, row_num_bg, role="label", font_size=24, is_bold=True, element_name="roundup_number_badge")
+    assert_render_contrast(cta_fg, cta_bg, role="cta", font_size=FONT_SIZE_CTA, is_bold=True, element_name="roundup_cta")
+    assert_render_contrast(footer_fg, footer_bg, role="body", font_size=FONT_SIZE_FOOTER, is_bold=True, element_name="roundup_footer")
+
+
 def render_cover_card(
     cover_data: CoverCardText,
     background_image: Optional[Image.Image] = None,
-    scene_mode: str = "neutral"
+    scene_mode: str = "neutral",
+    color_overrides: Optional[Dict[str, Tuple[int, int, int]]] = None
 ) -> Image.Image:
     """Deterministically render AR-01 Cover Card (1080x1350 px)."""
+    # 0. Preflight contrast validation
+    overrides = color_overrides or {}
+    validate_cover_card_contrast(**overrides)
+
+    series_badge_fg = overrides.get("series_badge_fg", COLOR_TEXT_IVORY)
+    series_badge_bg = overrides.get("series_badge_bg", COLOR_ACCENT_TERRACOTTA)
+    format_fg = overrides.get("format_fg", COLOR_TEXT_SAND)
+    headline_fg = overrides.get("headline_fg", COLOR_TEXT_IVORY)
+    meta_fg = overrides.get("meta_fg", COLOR_TEXT_SAND)
+    cta_fg = overrides.get("cta_fg", COLOR_TEXT_IVORY)
+    cta_bg = overrides.get("cta_bg", COLOR_ACCENT_TERRACOTTA)
+
     if background_image is not None:
         canvas = background_image.resize((CANVAS_WIDTH, CANVAS_HEIGHT), Image.Resampling.LANCZOS).convert("RGBA")
         canvas = apply_dark_scrim(canvas, bottom_scrim_height=750)
@@ -216,14 +299,14 @@ def render_cover_card(
         draw,
         (SAFE_MARGIN_X, top_y, SAFE_MARGIN_X + s_w, top_y + s_h),
         radius=14,
-        fill=(COLOR_ACCENT_TERRACOTTA[0], COLOR_ACCENT_TERRACOTTA[1], COLOR_ACCENT_TERRACOTTA[2], 230),
+        fill=(series_badge_bg[0], series_badge_bg[1], series_badge_bg[2], 230),
         outline=None
     )
-    draw.text((SAFE_MARGIN_X + 18, top_y + 8), series_text, font=font_series, fill=COLOR_TEXT_IVORY)
+    draw.text((SAFE_MARGIN_X + 18, top_y + 8), series_text, font=font_series, fill=series_badge_fg)
 
     # Format line beneath series badge (>= 24 px)
     format_y = top_y + s_h + 12
-    draw.text((SAFE_MARGIN_X, format_y), cover_data.format.upper(), font=font_format, fill=COLOR_TEXT_SAND)
+    draw.text((SAFE_MARGIN_X, format_y), cover_data.format.upper(), font=font_format, fill=format_fg)
 
     # 2. Main Headline Card Surface (Center-Bottom)
     draw_rounded_card(draw, card_box, radius=24, fill=COLOR_CARD_SURFACE_OPAQUE, outline=COLOR_CARD_BORDER_TERRACOTTA, width=2)
@@ -231,7 +314,7 @@ def render_cover_card(
     # Draw headline lines
     text_y = card_y + 35
     for line in wrapped_headline:
-        draw.text((SAFE_MARGIN_X + 30, text_y), line, font=headline_font, fill=COLOR_TEXT_IVORY)
+        draw.text((SAFE_MARGIN_X + 30, text_y), line, font=headline_font, fill=headline_fg)
         text_y += line_height
 
     # Tactile accent gesture
@@ -240,7 +323,7 @@ def render_cover_card(
     # 3. Metadata Line (Episode & Duration)
     meta_y = text_y + 28
     font_meta = get_font(FONT_SIZE_META, bold=False)
-    draw.text((SAFE_MARGIN_X + 30, meta_y), cover_data.metadata, font=font_meta, fill=COLOR_TEXT_SAND)
+    draw.text((SAFE_MARGIN_X + 30, meta_y), cover_data.metadata, font=font_meta, fill=meta_fg)
 
     # 4. CTA Button (Ivory on Terracotta, 30 px bold)
     cta_y = meta_y + 48
@@ -255,10 +338,10 @@ def render_cover_card(
         draw,
         cta_box,
         radius=16,
-        fill=(COLOR_ACCENT_TERRACOTTA[0], COLOR_ACCENT_TERRACOTTA[1], COLOR_ACCENT_TERRACOTTA[2], 255),
+        fill=(cta_bg[0], cta_bg[1], cta_bg[2], 255),
         outline=None
     )
-    draw.text((SAFE_MARGIN_X + 54, cta_y + 11), cta_text, font=font_cta, fill=COLOR_TEXT_IVORY)
+    draw.text((SAFE_MARGIN_X + 54, cta_y + 11), cta_text, font=font_cta, fill=cta_fg)
 
     # Combine layers and apply tactile paper grain overlay
     combined = Image.alpha_composite(canvas, overlay)
@@ -271,9 +354,23 @@ def render_insight_card(
     insight_data: InsightCardText,
     background_image: Optional[Image.Image] = None,
     scene_mode: str = "analyst",
-    accent_border: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA
+    accent_border: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+    color_overrides: Optional[Dict[str, Tuple[int, int, int]]] = None
 ) -> Image.Image:
     """Deterministically render AR-02 / AR-03 News Insight Card on controlled reading surfaces."""
+    # 0. Preflight contrast validation
+    overrides = color_overrides or {}
+    validate_insight_card_contrast(**overrides)
+
+    label_fg = overrides.get("label_fg", COLOR_TEXT_IVORY)
+    label_bg = overrides.get("label_bg", COLOR_ACCENT_SAGE)
+    headline_fg = overrides.get("headline_fg", COLOR_TEXT_IVORY)
+    key_fact_label_fg = overrides.get("key_fact_label_fg", COLOR_TEXT_SAND)
+    key_fact_body_fg = overrides.get("key_fact_body_fg", COLOR_TEXT_IVORY)
+    why_prefix_fg = overrides.get("why_prefix_fg", COLOR_ACCENT_APRICOT)
+    why_body_fg = overrides.get("why_body_fg", COLOR_TEXT_IVORY)
+    footer_fg = overrides.get("footer_fg", COLOR_TEXT_SAND)
+
     if background_image is not None:
         canvas = background_image.resize((CANVAS_WIDTH, CANVAS_HEIGHT), Image.Resampling.LANCZOS).convert("RGBA")
         canvas = apply_dark_scrim(canvas, bottom_scrim_height=850)
@@ -328,15 +425,15 @@ def render_insight_card(
         draw,
         (SAFE_MARGIN_X + 20, top_y + 16, SAFE_MARGIN_X + 20 + badge_w, top_y + 16 + badge_h),
         radius=12,
-        fill=(COLOR_ACCENT_SAGE[0], COLOR_ACCENT_SAGE[1], COLOR_ACCENT_SAGE[2], 220),
+        fill=(label_bg[0], label_bg[1], label_bg[2], 220),
         outline=None
     )
-    draw.text((SAFE_MARGIN_X + 36, top_y + 24), badge_label, font=font_badge, fill=COLOR_TEXT_IVORY)
+    draw.text((SAFE_MARGIN_X + 36, top_y + 24), badge_label, font=font_badge, fill=label_fg)
 
     # Title lines inside headline card
     title_y = top_y + 16 + badge_h + 16
     for line in title_lines:
-        draw.text((SAFE_MARGIN_X + 20, title_y), line, font=font_title, fill=COLOR_TEXT_IVORY)
+        draw.text((SAFE_MARGIN_X + 20, title_y), line, font=font_title, fill=headline_fg)
         title_y += title_lh
 
     # 2. Key Fact Container (Spans full content width)
@@ -351,12 +448,13 @@ def render_insight_card(
 
     draw_rounded_card(draw, fact_box, radius=20, fill=COLOR_CARD_SURFACE_OPAQUE, outline=COLOR_CARD_BORDER_SUBTLE, width=1)
     
-    # Section Label (24 px bold Sand)
-    fact_label_text = "HECHO CLAVE" if "es" in insight_data.footer.lower() or "episodio" in insight_data.footer.lower() else "KEY FACT"
-    draw.text((SAFE_MARGIN_X + 30, fact_card_y + 20), fact_label_text, font=font_fact_label, fill=COLOR_TEXT_SAND)
+    # Section Label (24 px bold Sand) - strictly English if not Spanish
+    is_spanish = ("es" in insight_data.footer.lower() or "episodio" in insight_data.footer.lower() or "semana" in insight_data.label.lower()) and "episode" not in insight_data.footer.lower()
+    fact_label_text = "HECHO CLAVE" if is_spanish else "KEY FACT"
+    draw.text((SAFE_MARGIN_X + 30, fact_card_y + 20), fact_label_text, font=font_fact_label, fill=key_fact_label_fg)
     fact_text_y = fact_card_y + 55
     for line in fact_lines:
-        draw.text((SAFE_MARGIN_X + 30, fact_text_y), line, font=font_fact_text, fill=COLOR_TEXT_IVORY)
+        draw.text((SAFE_MARGIN_X + 30, fact_text_y), line, font=font_fact_text, fill=key_fact_body_fg)
         fact_text_y += fact_lh
 
     # 3. Why It Matters Container (Highlighted with Terracotta/Apricot Accent Border)
@@ -391,17 +489,17 @@ def render_insight_card(
 
         if prefix:
             rest = line[len(prefix):].lstrip()
-            draw.text((SAFE_MARGIN_X + 30, why_text_y), prefix, font=font_why_bold, fill=COLOR_ACCENT_APRICOT)
+            draw.text((SAFE_MARGIN_X + 30, why_text_y), prefix, font=font_why_bold, fill=why_prefix_fg)
             prefix_bbox = draw.textbbox((SAFE_MARGIN_X + 30, why_text_y), prefix, font=font_why_bold)
-            draw.text((prefix_bbox[2] + 10, why_text_y), rest, font=font_why_text, fill=COLOR_TEXT_IVORY)
+            draw.text((prefix_bbox[2] + 10, why_text_y), rest, font=font_why_text, fill=why_body_fg)
         else:
-            draw.text((SAFE_MARGIN_X + 30, why_text_y), line, font=font_why_text, fill=COLOR_TEXT_IVORY)
+            draw.text((SAFE_MARGIN_X + 30, why_text_y), line, font=font_why_text, fill=why_body_fg)
         why_text_y += why_lh
 
     # 4. Footer Line (Fixed at bottom safe margin)
     footer_y = CANVAS_HEIGHT - SAFE_MARGIN_Y - 30
     font_footer = get_font(FONT_SIZE_FOOTER, bold=True)
-    draw.text((SAFE_MARGIN_X, footer_y), insight_data.footer.upper(), font=font_footer, fill=COLOR_TEXT_SAND)
+    draw.text((SAFE_MARGIN_X, footer_y), insight_data.footer.upper(), font=font_footer, fill=footer_fg)
 
     combined = Image.alpha_composite(canvas, overlay)
     grained = apply_paper_grain(combined, intensity=0.035)
@@ -412,24 +510,54 @@ def render_insight_card(
 def render_context_card(
     context_data: EditionContextCardText,
     background_image: Optional[Image.Image] = None,
-    scene_mode: str = "analyst"
+    scene_mode: str = "analyst",
+    why_it_matters: Optional[str] = None,
+    language: str = "es",
+    color_overrides: Optional[Dict[str, Tuple[int, int, int]]] = None
 ) -> Image.Image:
     """Render AR-03 Fallback Context Card when fewer than 2 news items are present."""
+    if why_it_matters is None:
+        if language.lower().startswith("en") or "episode" in context_data.footer.lower() or "context" in context_data.label.lower():
+            why_it_matters = "WHY IT MATTERS: In-depth analysis and strategic context for engineering teams."
+        else:
+            why_it_matters = "POR QUÉ IMPORTA: Análisis y perspectiva para el equipo."
+
     insight_proxy = InsightCardText(
         label=context_data.label,
         title=context_data.title,
         key_fact=context_data.context_text,
-        why_it_matters="POR QUÉ IMPORTA: Análisis y perspectiva para el equipo.",
+        why_it_matters=why_it_matters,
         footer=context_data.footer
     )
-    return render_insight_card(insight_proxy, background_image=background_image, scene_mode=scene_mode, accent_border=COLOR_ACCENT_APRICOT)
+    return render_insight_card(
+        insight_proxy,
+        background_image=background_image,
+        scene_mode=scene_mode,
+        accent_border=COLOR_ACCENT_APRICOT,
+        color_overrides=color_overrides
+    )
 
 
 def render_roundup_card(
     roundup_data: RoundupCardText,
-    background_image: Optional[Image.Image] = None
+    background_image: Optional[Image.Image] = None,
+    color_overrides: Optional[Dict[str, Tuple[int, int, int]]] = None
 ) -> Image.Image:
     """Deterministically render AR-04 Closing Radar Card (1080x1350 px)."""
+    # 0. Preflight contrast validation
+    overrides = color_overrides or {}
+    validate_roundup_card_contrast(**overrides)
+
+    label_fg = overrides.get("label_fg", COLOR_TEXT_IVORY)
+    label_bg = overrides.get("label_bg", COLOR_ACCENT_TERRACOTTA)
+    headline_fg = overrides.get("headline_fg", COLOR_TEXT_IVORY)
+    row_title_fg = overrides.get("row_title_fg", COLOR_TEXT_IVORY)
+    row_num_fg = overrides.get("row_num_fg", COLOR_TEXT_IVORY)
+    row_num_bg = overrides.get("row_num_bg", COLOR_ACCENT_TERRACOTTA)
+    cta_fg = overrides.get("cta_fg", COLOR_TEXT_IVORY)
+    cta_bg = overrides.get("cta_bg", COLOR_ACCENT_TERRACOTTA)
+    footer_fg = overrides.get("footer_fg", COLOR_TEXT_SAND)
+
     if background_image is not None:
         canvas = background_image.resize((CANVAS_WIDTH, CANVAS_HEIGHT), Image.Resampling.LANCZOS).convert("RGBA")
         canvas = apply_dark_scrim(canvas, bottom_scrim_height=900)
@@ -464,10 +592,10 @@ def render_roundup_card(
         draw,
         (SAFE_MARGIN_X, top_y, SAFE_MARGIN_X + badge_w, top_y + badge_h),
         radius=12,
-        fill=(COLOR_ACCENT_TERRACOTTA[0], COLOR_ACCENT_TERRACOTTA[1], COLOR_ACCENT_TERRACOTTA[2], 230),
+        fill=(label_bg[0], label_bg[1], label_bg[2], 230),
         outline=None
     )
-    draw.text((SAFE_MARGIN_X + 16, top_y + 8), badge_label, font=font_badge, fill=COLOR_TEXT_IVORY)
+    draw.text((SAFE_MARGIN_X + 16, top_y + 8), badge_label, font=font_badge, fill=label_fg)
 
     # 2. Main Headline (54 px bold)
     title_y = top_y + badge_h + 24
@@ -475,7 +603,7 @@ def render_roundup_card(
     title_lines = wrap_text(roundup_data.headline, font_title, CONTENT_WIDTH, draw)
     title_lh = int(FONT_SIZE_ROUNDUP_HEADLINE * HEADLINE_LINE_HEIGHT_RATIO)
     for line in title_lines:
-        draw.text((SAFE_MARGIN_X, title_y), line, font=font_title, fill=COLOR_TEXT_IVORY)
+        draw.text((SAFE_MARGIN_X, title_y), line, font=font_title, fill=headline_fg)
         title_y += title_lh
 
     # 3. Clean Left Column: Remaining News Items (30 px body font size)
@@ -494,13 +622,13 @@ def render_roundup_card(
 
         # Number circle badge
         num_circle_box = [SAFE_MARGIN_X + 16, current_item_y + 16, SAFE_MARGIN_X + 50, current_item_y + 50]
-        draw.ellipse(num_circle_box, fill=COLOR_ACCENT_TERRACOTTA)
-        draw.text((SAFE_MARGIN_X + 27, current_item_y + 20), str(idx), font=font_num, fill=COLOR_TEXT_IVORY)
+        draw.ellipse(num_circle_box, fill=row_num_bg)
+        draw.text((SAFE_MARGIN_X + 27, current_item_y + 20), str(idx), font=font_num, fill=row_num_fg)
 
         # Title text lines
         line_y = current_item_y + 18
         for l in item_lines:
-            draw.text((SAFE_MARGIN_X + 66, line_y), l, font=font_item, fill=COLOR_TEXT_IVORY)
+            draw.text((SAFE_MARGIN_X + 66, line_y), l, font=font_item, fill=row_title_fg)
             line_y += 38
 
         current_item_y += box_h + 16
@@ -518,15 +646,15 @@ def render_roundup_card(
         draw,
         cta_box,
         radius=16,
-        fill=(COLOR_ACCENT_TERRACOTTA[0], COLOR_ACCENT_TERRACOTTA[1], COLOR_ACCENT_TERRACOTTA[2], 255),
+        fill=(cta_bg[0], cta_bg[1], cta_bg[2], 255),
         outline=None
     )
-    draw.text((SAFE_MARGIN_X + 24, cta_y + 12), cta_text, font=font_cta, fill=COLOR_TEXT_IVORY)
+    draw.text((SAFE_MARGIN_X + 24, cta_y + 12), cta_text, font=font_cta, fill=cta_fg)
 
     # 5. Footer
     footer_y = CANVAS_HEIGHT - SAFE_MARGIN_Y - 30
     font_footer = get_font(FONT_SIZE_FOOTER, bold=True)
-    draw.text((SAFE_MARGIN_X, footer_y), roundup_data.footer.upper(), font=font_footer, fill=COLOR_TEXT_SAND)
+    draw.text((SAFE_MARGIN_X, footer_y), roundup_data.footer.upper(), font=font_footer, fill=footer_fg)
 
     combined = Image.alpha_composite(canvas, overlay)
     grained = apply_paper_grain(combined, intensity=0.035)
@@ -775,7 +903,13 @@ def generate_visual_assets(
         )
         card_b_filename = f"episode-{ep_num}-03-insight-{slug_b}.png"
         card_b_path = edition_dir / card_b_filename
-        insight_b_img = render_context_card(context_text_model, background_image=bg_b, scene_mode=story_b.get("scene_mode", "analyst"))
+        insight_b_img = render_context_card(
+            context_text_model,
+            background_image=bg_b,
+            scene_mode=story_b.get("scene_mode", "analyst"),
+            why_it_matters=story_b.get("why_it_matters"),
+            language=lang_code
+        )
         insight_b_img.save(card_b_path, format="PNG")
         generated_file_paths["insight_b"] = card_b_path
 

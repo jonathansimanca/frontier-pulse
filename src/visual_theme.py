@@ -135,6 +135,35 @@ def validate_contrast_by_role(
     return is_valid, ratio, details
 
 
+def assert_render_contrast(
+    text_rgb: Tuple[int, int, int],
+    bg_rgb: Tuple[int, int, int],
+    role: str = "body",
+    font_size: int = 30,
+    is_bold: bool = False,
+    element_name: str = "element"
+) -> float:
+    """Preflight contrast validation for a rendering element.
+
+    Raises ValueError if the contrast ratio does not meet the role-based minimum.
+    Returns the calculated contrast ratio.
+    """
+    is_valid, ratio, details = validate_contrast_by_role(
+        text_rgb=text_rgb,
+        bg_rgb=bg_rgb,
+        role=role,
+        font_size=font_size,
+        is_bold=is_bold
+    )
+    if not is_valid:
+        raise ValueError(
+            f"Contrast validation failed for '{element_name}': ratio {ratio:.2f}:1 does not meet required "
+            f"{details['min_required']}:1 (role='{role}', font_size={font_size}, is_bold={is_bold}). "
+            f"Foreground={text_rgb}, Background={bg_rgb}."
+        )
+    return ratio
+
+
 def get_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     """Retrieve a TrueType font with cross-platform fallback."""
     font_candidates = []
