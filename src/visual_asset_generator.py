@@ -1,7 +1,8 @@
 """Visual Asset Generator for Frontier Pulse.
 
-Generates LinkedIn mobile video visual cards (1080x1350 px, 4:5 aspect ratio)
-combining AI-generated background artwork with deterministic Pillow typography compositing.
+Generates 4-asset Editorial Earth Tactile mobile video cards (1080x1350 px, 4:5 aspect ratio)
+combining deterministic Pillow typography compositing, the Pulse character system,
+tactile textures, and AI-generated artwork backgrounds.
 """
 
 import os
@@ -9,7 +10,7 @@ import re
 import json
 import base64
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 from src.config import (
@@ -24,368 +25,66 @@ from src.schemas import (
     VisualAssetItem,
     CoverCardText,
     InsightCardText,
-    Edition,
-    NewsItem,
+    EditionContextCardText,
+    RoundupCardText,
 )
-
-# Dimensions & Safe Margins (AR: 4:5 for LinkedIn Mobile Video)
-CANVAS_WIDTH = 1080
-CANVAS_HEIGHT = 1350
-SAFE_MARGIN_X = 80
-SAFE_MARGIN_Y = 80
-CONTENT_WIDTH = CANVAS_WIDTH - (2 * SAFE_MARGIN_X)
-
-# Visual Theme Colors
-COLOR_BG_DARK = (10, 15, 29)
-COLOR_TEXT_PRIMARY = (255, 255, 255)
-COLOR_TEXT_MUTED = (148, 163, 184)
-COLOR_ACCENT_CYAN = (56, 189, 248)
-COLOR_ACCENT_EMERALD = (52, 211, 153)
-COLOR_ACCENT_AMBER = (251, 191, 36)
-COLOR_ACCENT_VIOLET = (168, 85, 247)
-COLOR_CARD_BG = (15, 23, 42, 220)
-COLOR_CARD_BORDER = (51, 65, 85, 180)
-
-
-def get_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
-    """Retrieve a TrueType font with cross-platform fallback."""
-    font_candidates = []
-    if bold:
-        font_candidates = [
-            "DejaVuSans-Bold.ttf",
-            "LiberationSans-Bold.ttf",
-            "Arial-Bold.ttf",
-            "Roboto-Bold.ttf",
-            "arialbd.ttf",
-            "Helvetica-Bold.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-            "C:/Windows/Fonts/arialbd.ttf",
-            "C:/Windows/Fonts/seguisb.ttf",
-        ]
-    else:
-        font_candidates = [
-            "DejaVuSans.ttf",
-            "LiberationSans-Regular.ttf",
-            "Arial.ttf",
-            "Roboto-Regular.ttf",
-            "arial.ttf",
-            "Helvetica.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            "C:/Windows/Fonts/arial.ttf",
-            "C:/Windows/Fonts/segoeui.ttf",
-        ]
-
-    for candidate in font_candidates:
-        try:
-            return ImageFont.truetype(candidate, size=size)
-        except Exception:
-            continue
-
-    # Fallback to default FreeTypeFont
-    try:
-        return ImageFont.load_default(size=size)
-    except Exception:
-        return ImageFont.load_default()
-
-
-def wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int, draw: ImageDraw.ImageDraw) -> List[str]:
-    """Deterministically wrap text so each line fits within max_width pixels."""
-    words = text.strip().split()
-    if not words:
-        return []
-
-    lines = []
-    current_line = []
-
-    for word in words:
-        test_line = " ".join(current_line + [word])
-        bbox = draw.textbbox((0, 0), test_line, font=font)
-        line_width = bbox[2] - bbox[0]
-        if line_width <= max_width or not current_line:
-            current_line.append(word)
-        else:
-            lines.append(" ".join(current_line))
-            current_line = [word]
-
-    if current_line:
-        lines.append(" ".join(current_line))
-
-    return lines
-
-
-def create_base_gradient_background(accent_color: Tuple[int, int, int] = COLOR_ACCENT_CYAN) -> Image.Image:
-    """Generate a premium dark technology ambient background image."""
-    img = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), COLOR_BG_DARK)
-    draw = ImageDraw.Draw(img)
-
-    # Subtle top-to-bottom vertical gradient
-    for y in range(CANVAS_HEIGHT):
-        ratio = y / CANVAS_HEIGHT
-        r = int(10 * (1 - ratio) + 5 * ratio)
-        g = int(15 * (1 - ratio) + 8 * ratio)
-        b = int(29 * (1 - ratio) + 18 * ratio)
-        draw.line([(0, y), (CANVAS_WIDTH, y)], fill=(r, g, b, 255))
-
-    # Glow blob overlay
-    glow = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
-    glow_draw = ImageDraw.Draw(glow)
-    center_x, center_y = CANVAS_WIDTH // 2, CANVAS_HEIGHT // 3
-    glow_color = (accent_color[0], accent_color[1], accent_color[2], 30)
-    glow_draw.ellipse(
-        [center_x - 350, center_y - 250, center_x + 350, center_y + 250],
-        fill=glow_color
-    )
-    glow = glow.filter(ImageFilter.GaussianBlur(80))
-    img = Image.alpha_composite(img, glow)
-
-    # Subtle tech grid pattern
-    grid_overlay = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
-    grid_draw = ImageDraw.Draw(grid_overlay)
-    grid_size = 60
-    for x in range(0, CANVAS_WIDTH, grid_size):
-        grid_draw.line([(x, 0), (x, CANVAS_HEIGHT)], fill=(255, 255, 255, 6))
-    for y in range(0, CANVAS_HEIGHT, grid_size):
-        grid_draw.line([(0, y), (CANVAS_WIDTH, y)], fill=(255, 255, 255, 6))
-    img = Image.alpha_composite(img, grid_overlay)
-
-    return img
-
-
-def draw_rounded_card(
-    draw: ImageDraw.ImageDraw,
-    xy: Tuple[int, int, int, int],
-    radius: int = 16,
-    fill: Tuple[int, int, int, int] = COLOR_CARD_BG,
-    outline: Optional[Tuple[int, int, int, int]] = COLOR_CARD_BORDER,
-    width: int = 1
-) -> None:
-    """Draw a translucent rounded card container with optional border."""
-    draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
-
-
-def render_cover_card(
-    cover_data: CoverCardText,
-    background_image: Optional[Image.Image] = None,
-    accent_color: Tuple[int, int, int] = COLOR_ACCENT_CYAN
-) -> Image.Image:
-    """Deterministically render AR-01 Cover / Opening Card (1080x1350 px)."""
-    if background_image is not None:
-        canvas = background_image.resize((CANVAS_WIDTH, CANVAS_HEIGHT), Image.Resampling.LANCZOS).convert("RGBA")
-        # Apply dark gradient scrim to ensure text legibility
-        scrim = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
-        scrim_draw = ImageDraw.Draw(scrim)
-        # Dark top gradient
-        for y in range(350):
-            alpha = int(220 * (1 - y / 350))
-            scrim_draw.line([(0, y), (CANVAS_WIDTH, y)], fill=(5, 8, 17, alpha))
-        # Dark bottom gradient
-        for y in range(CANVAS_HEIGHT - 650, CANVAS_HEIGHT):
-            progress = (y - (CANVAS_HEIGHT - 650)) / 650
-            alpha = int(240 * progress)
-            scrim_draw.line([(0, y), (CANVAS_WIDTH, y)], fill=(5, 8, 17, alpha))
-        canvas = Image.alpha_composite(canvas, scrim)
-    else:
-        canvas = create_base_gradient_background(accent_color)
-
-    # Overlay layer for text and cards
-    overlay = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-
-    # 1. Top Series & Format Label
-    font_series = get_font(30, bold=True)
-    font_format = get_font(20, bold=False)
-
-    top_y = SAFE_MARGIN_Y + 10
-    draw.text((SAFE_MARGIN_X, top_y), cover_data.series.upper(), font=font_series, fill=accent_color)
-    
-    bbox_series = draw.textbbox((SAFE_MARGIN_X, top_y), cover_data.series.upper(), font=font_series)
-    format_y = bbox_series[3] + 8
-    draw.text((SAFE_MARGIN_X, format_y), cover_data.format.upper(), font=font_format, fill=COLOR_TEXT_MUTED)
-
-    # Accent decorative top-right indicator
-    draw.rounded_rectangle(
-        [CANVAS_WIDTH - SAFE_MARGIN_X - 110, top_y + 2, CANVAS_WIDTH - SAFE_MARGIN_X, top_y + 36],
-        radius=17,
-        fill=(accent_color[0], accent_color[1], accent_color[2], 40),
-        outline=accent_color,
-        width=1
-    )
-    font_badge = get_font(16, bold=True)
-    draw.text((CANVAS_WIDTH - SAFE_MARGIN_X - 95, top_y + 10), "PODCAST", font=font_badge, fill=accent_color)
-
-    # 2. Main Headline Card (Center-Bottom)
-    headline_font = get_font(56, bold=True)
-    wrapped_headline = wrap_text(cover_data.headline, headline_font, CONTENT_WIDTH - 60, draw)
-    
-    line_height = 70
-    headline_block_height = len(wrapped_headline) * line_height
-
-    card_y = CANVAS_HEIGHT - SAFE_MARGIN_Y - 380 - (headline_block_height - 140)
-    card_y = max(450, card_y)
-    card_height = headline_block_height + 250
-    card_box = (SAFE_MARGIN_X, card_y, CANVAS_WIDTH - SAFE_MARGIN_X, card_y + card_height)
-
-    # Draw semi-transparent card container
-    draw_rounded_card(draw, card_box, radius=24, fill=(15, 23, 42, 230), outline=(accent_color[0], accent_color[1], accent_color[2], 120), width=2)
-
-    # Draw Headline lines
-    text_y = card_y + 35
-    for line in wrapped_headline:
-        draw.text((SAFE_MARGIN_X + 30, text_y), line, font=headline_font, fill=COLOR_TEXT_PRIMARY)
-        text_y += line_height
-
-    # 3. Metadata Line (Episode & Duration)
-    meta_y = text_y + 20
-    font_meta = get_font(26, bold=False)
-    draw.text((SAFE_MARGIN_X + 30, meta_y), cover_data.metadata, font=font_meta, fill=COLOR_TEXT_MUTED)
-
-    # 4. CTA Button
-    cta_y = meta_y + 55
-    font_cta = get_font(28, bold=True)
-    cta_text = cover_data.cta.strip()
-    cta_bbox = draw.textbbox((0, 0), cta_text, font=font_cta)
-    cta_w = (cta_bbox[2] - cta_bbox[0]) + 48
-    cta_h = 56
-
-    cta_box = (SAFE_MARGIN_X + 30, cta_y, SAFE_MARGIN_X + 30 + cta_w, cta_y + cta_h)
-    draw_rounded_card(draw, cta_box, radius=16, fill=(accent_color[0], accent_color[1], accent_color[2], 255), outline=None)
-    draw.text((SAFE_MARGIN_X + 54, cta_y + 12), cta_text, font=font_cta, fill=(10, 15, 29, 255))
-
-    final_img = Image.alpha_composite(canvas, overlay)
-    return final_img.convert("RGB")
-
-
-def render_insight_card(
-    insight_data: InsightCardText,
-    background_image: Optional[Image.Image] = None,
-    accent_color: Tuple[int, int, int] = COLOR_ACCENT_CYAN
-) -> Image.Image:
-    """Deterministically render AR-02 / AR-03 News Insight Card (1080x1350 px)."""
-    if background_image is not None:
-        canvas = background_image.resize((CANVAS_WIDTH, CANVAS_HEIGHT), Image.Resampling.LANCZOS).convert("RGBA")
-        # Dark scrim to ensure contrast
-        scrim = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
-        scrim_draw = ImageDraw.Draw(scrim)
-        for y in range(CANVAS_HEIGHT):
-            alpha = int(180 + 75 * (y / CANVAS_HEIGHT))
-            scrim_draw.line([(0, y), (CANVAS_WIDTH, y)], fill=(5, 8, 17, min(255, alpha)))
-        canvas = Image.alpha_composite(canvas, scrim)
-    else:
-        canvas = create_base_gradient_background(accent_color)
-
-    overlay = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-
-    # 1. Top Badge / Label (e.g., ESTA SEMANA EN IA)
-    top_y = SAFE_MARGIN_Y + 10
-    font_badge = get_font(22, bold=True)
-    badge_label = insight_data.label.upper()
-    badge_bbox = draw.textbbox((0, 0), badge_label, font=font_badge)
-    badge_w = (badge_bbox[2] - badge_bbox[0]) + 36
-    badge_h = 44
-
-    draw_rounded_card(
-        draw,
-        (SAFE_MARGIN_X, top_y, SAFE_MARGIN_X + badge_w, top_y + badge_h),
-        radius=14,
-        fill=(accent_color[0], accent_color[1], accent_color[2], 45),
-        outline=accent_color,
-        width=1
-    )
-    draw.text((SAFE_MARGIN_X + 18, top_y + 10), badge_label, font=font_badge, fill=accent_color)
-
-    # 2. Story Title (Plain language headline, max 9 words)
-    title_y = top_y + badge_h + 30
-    font_title = get_font(50, bold=True)
-    title_lines = wrap_text(insight_data.title, font_title, CONTENT_WIDTH, draw)
-    
-    title_lh = 64
-    for line in title_lines:
-        draw.text((SAFE_MARGIN_X, title_y), line, font=font_title, fill=COLOR_TEXT_PRIMARY)
-        title_y += title_lh
-
-    # 3. Key Fact Container
-    fact_card_y = title_y + 35
-    font_fact_label = get_font(18, bold=True)
-    font_fact_text = get_font(26, bold=False)
-
-    fact_lines = wrap_text(insight_data.key_fact, font_fact_text, CONTENT_WIDTH - 60, draw)
-    fact_lh = 38
-    fact_box_h = 45 + (len(fact_lines) * fact_lh) + 30
-    fact_box = (SAFE_MARGIN_X, fact_card_y, CANVAS_WIDTH - SAFE_MARGIN_X, fact_card_y + fact_box_h)
-
-    draw_rounded_card(draw, fact_box, radius=20, fill=(15, 23, 42, 235), outline=COLOR_CARD_BORDER, width=1)
-    
-    # Fact label
-    draw.text((SAFE_MARGIN_X + 30, fact_card_y + 20), "HECHO CLAVE / KEY FACT", font=font_fact_label, fill=COLOR_TEXT_MUTED)
-    # Fact body text
-    fact_text_y = fact_card_y + 55
-    for line in fact_lines:
-        draw.text((SAFE_MARGIN_X + 30, fact_text_y), line, font=font_fact_text, fill=(241, 245, 249))
-        fact_text_y += fact_lh
-
-    # 4. Why It Matters Container (Highlighted with Accent Border)
-    why_card_y = fact_card_y + fact_box_h + 25
-    font_why_text = get_font(26, bold=False)
-    font_why_bold = get_font(26, bold=True)
-
-    why_text = insight_data.why_it_matters.strip()
-    why_lines = wrap_text(why_text, font_why_text, CONTENT_WIDTH - 60, draw)
-    why_lh = 38
-    why_box_h = 30 + (len(why_lines) * why_lh) + 30
-    why_box = (SAFE_MARGIN_X, why_card_y, CANVAS_WIDTH - SAFE_MARGIN_X, why_card_y + why_box_h)
-
-    draw_rounded_card(
-        draw,
-        why_box,
-        radius=20,
-        fill=(15, 23, 42, 240),
-        outline=(accent_color[0], accent_color[1], accent_color[2], 180),
-        width=2
-    )
-
-    why_text_y = why_card_y + 25
-    for line_idx, line in enumerate(why_lines):
-        if line_idx == 0 and (line.startswith("POR QUÉ IMPORTA:") or line.startswith("WHY IT MATTERS:")):
-            prefix = "POR QUÉ IMPORTA:" if line.startswith("POR QUÉ IMPORTA:") else "WHY IT MATTERS:"
-            rest = line[len(prefix):]
-            draw.text((SAFE_MARGIN_X + 30, why_text_y), prefix, font=font_why_bold, fill=accent_color)
-            prefix_bbox = draw.textbbox((SAFE_MARGIN_X + 30, why_text_y), prefix, font=font_why_bold)
-            draw.text((prefix_bbox[2] + 8, why_text_y), rest, font=font_why_text, fill=COLOR_TEXT_PRIMARY)
-        else:
-            draw.text((SAFE_MARGIN_X + 30, why_text_y), line, font=font_why_text, fill=COLOR_TEXT_PRIMARY)
-        why_text_y += why_lh
-
-    # 5. Footer Line (Fixed at bottom safe margin)
-    footer_y = CANVAS_HEIGHT - SAFE_MARGIN_Y - 30
-    font_footer = get_font(20, bold=True)
-    draw.text((SAFE_MARGIN_X, footer_y), insight_data.footer.upper(), font=font_footer, fill=COLOR_TEXT_MUTED)
-
-    final_img = Image.alpha_composite(canvas, overlay)
-    return final_img.convert("RGB")
-
-
-def slugify(text: str, max_words: int = 3) -> str:
-    """Convert text into a clean URL-friendly hyphenated slug."""
-    text = re.sub(r"[^\w\s-]", "", text.lower())
-    words = text.strip().split()[:max_words]
-    slug = "-".join(words)
-    return slug or "news"
+from src.visual_theme import (
+    CANVAS_WIDTH,
+    CANVAS_HEIGHT,
+    SAFE_MARGIN_X,
+    SAFE_MARGIN_Y,
+    CONTENT_WIDTH,
+    COLOR_BG_CHARCOAL,
+    COLOR_SURFACE_INK,
+    COLOR_TEXT_IVORY,
+    COLOR_TEXT_SAND,
+    COLOR_ACCENT_TERRACOTTA,
+    COLOR_ACCENT_APRICOT,
+    COLOR_ACCENT_SAGE,
+    COLOR_CARD_SURFACE_OPAQUE,
+    COLOR_CARD_SURFACE_TRANSLUCENT,
+    COLOR_CARD_BORDER_SUBTLE,
+    COLOR_CARD_BORDER_TERRACOTTA,
+    COLOR_CARD_BORDER_SAGE,
+    FONT_SIZE_COVER_HEADLINE,
+    FONT_SIZE_INSIGHT_HEADLINE,
+    FONT_SIZE_ROUNDUP_HEADLINE,
+    FONT_SIZE_BODY,
+    FONT_SIZE_CTA,
+    FONT_SIZE_META,
+    FONT_SIZE_LABEL,
+    FONT_SIZE_FOOTER,
+    HEADLINE_LINE_HEIGHT_RATIO,
+    get_font,
+    wrap_text,
+    validate_contrast_by_role,
+    assert_render_contrast,
+)
+from src.pulse_character import (
+    composite_pulse_on_canvas,
+    get_pulse_pose,
+)
+from src.tactile_texture import (
+    apply_paper_grain,
+    draw_terracotta_brush_stroke,
+    draw_apricot_marker_underline,
+    draw_sage_emphasis_mark,
+)
+from src.scene_prompt_builder import build_scene_prompt
+from src.editorial_planner import (
+    plan_editorial_cards,
+    build_fallback_plan,
+    slugify,
+    clamp_words,
+)
 
 
 def get_episode_number(edition_date: Optional[str] = None) -> int:
-    """Resolve the sequential episode number for the given edition date.
-
-    Supports EPISODE_NUMBER environment variable, anchors on known edition dates,
-    or calculates sequentially based on historical folders.
-    """
+    """Resolve sequential episode number from env, date anchors, or disk folders."""
     env_ep = os.getenv("EPISODE_NUMBER")
     if env_ep and env_ep.strip().isdigit():
         return int(env_ep.strip())
 
-    # Baseline sequence
     known_editions = ["2026-08-05", "2026-08-12", "2026-08-18", "2026-08-24"]
     if edition_date and edition_date in known_editions:
         return known_editions.index(edition_date) + 1
@@ -404,215 +103,569 @@ def get_episode_number(edition_date: Optional[str] = None) -> int:
     return 4
 
 
-def clamp_words(text: str, max_words: int) -> str:
-    """Ensure a string does not exceed max_words."""
-    words = text.strip().split()
-    if len(words) <= max_words:
-        return text.strip()
-    return " ".join(words[:max_words])
+def create_base_gradient_background(scene_mode: str = "neutral") -> Image.Image:
+    """Generate a warm Editorial Earth Tactile gradient background."""
+    img = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), COLOR_BG_CHARCOAL + (255,))
+    draw = ImageDraw.Draw(img)
 
+    # Vertical background gradient from Surface Ink to Charcoal
+    r1, g1, b1 = COLOR_SURFACE_INK
+    r2, g2, b2 = COLOR_BG_CHARCOAL
+    for y in range(CANVAS_HEIGHT):
+        ratio = y / CANVAS_HEIGHT
+        r = int(r1 * (1 - ratio) + r2 * ratio)
+        g = int(g1 * (1 - ratio) + g2 * ratio)
+        b = int(b1 * (1 - ratio) + b2 * ratio)
+        draw.line([(0, y), (CANVAS_WIDTH, y)], fill=(r, g, b, 255))
 
-def plan_visual_card_contents(
-    news_data: dict,
-    episode_number: int,
-    duration_minutes: int = 4,
-    language: str = "es"
-) -> dict:
-    """Use Gemini 3.7 Flash to formulate structured, concise copy for visual cards."""
-    items = news_data.get("items", [])
-    if not items:
-        raise ValueError("Cannot plan visual cards from empty news items.")
-
-    primary_item = items[0]
-    secondary_item = items[1] if len(items) > 1 else None
-
-    # Deterministic baseline fallbacks
-    fallback_headline = clamp_words(f"3 avances clave de IA esta semana", 10) if language == "es" else clamp_words("3 key AI developments this week", 10)
+    # Soft ambient atmospheric warm glow in upper canvas
+    glow = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow)
+    cx, cy = CANVAS_WIDTH // 2, int(CANVAS_HEIGHT * 0.35)
     
-    fallback_story_a_title = clamp_words(primary_item.get("title", "Avance destacado en Inteligencia Artificial"), 9)
-    fallback_story_a_fact = clamp_words(primary_item.get("summary", "Desarrollo relevante en el ecosistema de IA."), 20)
-    why_raw_a = primary_item.get("why_it_matters", "Impacto directo en la productividad y arquitectura técnica.")
-    fallback_story_a_why = clamp_words(f"POR QUÉ IMPORTA: {why_raw_a}", 16) if language == "es" else clamp_words(f"WHY IT MATTERS: {why_raw_a}", 16)
-    slug_a = slugify(primary_item.get("id", primary_item.get("title", "ai-news")))
+    glow_color = COLOR_ACCENT_TERRACOTTA if scene_mode in ["alert", "builder"] else COLOR_ACCENT_APRICOT
+    glow_draw.ellipse(
+        [cx - 380, cy - 280, cx + 380, cy + 280],
+        fill=(glow_color[0], glow_color[1], glow_color[2], 35)
+    )
+    glow = glow.filter(ImageFilter.GaussianBlur(90))
+    img = Image.alpha_composite(img, glow)
 
-    source_a = "Frontier Pulse"
-    if primary_item.get("sources") and len(primary_item["sources"]) > 0:
-        source_a = str(primary_item["sources"][0].get("url", primary_item["sources"][0].get("publisher", "Frontier Pulse")))
+    return img
 
-    fallback_plan = {
-        "cover": {
-            "headline": fallback_headline,
-            "visual_prompt": "Abstract geometric 3D network neural nodes floating in deep blue cyberspace, volumetric rim lighting, high-tech dark minimal aesthetic, no text."
-        },
-        "story_a": {
-            "slug": slug_a,
-            "title": fallback_story_a_title,
-            "key_fact": fallback_story_a_fact,
-            "why_it_matters": fallback_story_a_why,
-            "source_reference": source_a,
-            "visual_prompt": "Clean futuristic dark cyber interface with abstract glowing data streams, minimal high contrast, 3d render, no text."
-        },
-        "include_card_b": False,
-        "story_b": None
-    }
 
-    if secondary_item:
-        # Check if secondary item has a distinct category or high relevance
-        is_distinct = secondary_item.get("category") != primary_item.get("category") or secondary_item.get("relevance_score", 0) >= 4
-        if is_distinct:
-            fallback_plan["include_card_b"] = True
-            slug_b = slugify(secondary_item.get("id", secondary_item.get("title", "second-story")))
-            source_b = "Frontier Pulse"
-            if secondary_item.get("sources") and len(secondary_item["sources"]) > 0:
-                source_b = str(secondary_item["sources"][0].get("url", secondary_item["sources"][0].get("publisher", "Frontier Pulse")))
-            
-            fallback_plan["story_b"] = {
-                "slug": slug_b,
-                "title": clamp_words(secondary_item.get("title", "Innovación técnica en modelos de lenguaje"), 9),
-                "key_fact": clamp_words(secondary_item.get("summary", "Avance verificado en modelos de inteligencia artificial."), 20),
-                "why_it_matters": clamp_words(f"POR QUÉ IMPORTA: {secondary_item.get('why_it_matters', 'Relevancia técnica inmediata.')}", 16) if language == "es" else clamp_words(f"WHY IT MATTERS: {secondary_item.get('why_it_matters', 'Technical relevance.')}", 16),
-                "source_reference": source_b,
-                "visual_prompt": "Modern high-tech data visualization particles in deep obsidian purple space, sleek glowing contours, no text."
-            }
+def draw_rounded_card(
+    draw: ImageDraw.ImageDraw,
+    xy: Tuple[int, int, int, int],
+    radius: int = 20,
+    fill: Tuple[int, int, int, int] = COLOR_CARD_SURFACE_OPAQUE,
+    outline: Optional[Tuple[int, int, int, int]] = COLOR_CARD_BORDER_SUBTLE,
+    width: int = 1
+) -> None:
+    """Draw a rounded card container surface with high contrast."""
+    draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
 
-    # Attempt LLM structured formulation with Gemini
-    try:
-        client = get_genai_client()
-        prompt = f"""You are the Lead Visual Designer and Editor for Frontier Pulse, a premier AI technology watch podcast.
-Formulate structured copy and visual background prompts for 2 to 3 mobile video cards (1080x1350 px) based on this edition's news items.
 
-Edition Title: {news_data.get('title', '')}
-Language: Latin American Spanish ({language})
-Items:
-{json.dumps([{
-    'id': it.get('id'),
-    'title': it.get('title'),
-    'category': it.get('category'),
-    'summary': it.get('summary'),
-    'why_it_matters': it.get('why_it_matters'),
-    'relevance_score': it.get('relevance_score'),
-    'sources': it.get('sources', [])
-} for it in items[:3]], indent=2, ensure_ascii=False)}
+def apply_dark_scrim(canvas: Image.Image, bottom_scrim_height: int = 700) -> Image.Image:
+    """Apply dark gradient scrim to preserve high contrast for text overlays."""
+    scrim = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
+    scrim_draw = ImageDraw.Draw(scrim)
 
-CONSTRAINTS & RULES:
-1. All card copy MUST be in Latin American Spanish.
-2. Cover Card:
-   - headline: EXACTLY 1 benefit-led headline explaining why this week matters. MAXIMUM 10 WORDS.
-   - visual_prompt: Atmospheric 3D abstract concept prompt for the background illustration (NO text, NO letters, dark high-tech palette).
-3. Story A (Primary Story):
-   - slug: 2-3 word lowercase hyphenated topic slug (e.g. "astra-reasoning", "agentes-autonomos").
-   - title: Plain-language headline. MAXIMUM 9 WORDS (no clickbait).
-   - key_fact: 1 verifiable factual sentence describing what happened. MAXIMUM 20 WORDS.
-   - why_it_matters: Short practical implication starting with "POR QUÉ IMPORTA: ". MAXIMUM 16 WORDS (including prefix).
-   - visual_prompt: Abstract visual concept prompt for Story A background (NO text).
-4. Story B (Optional Secondary Card):
-   - include_card_b: true ONLY IF there is a second story that is substantively distinct from Story A and adds major standalone value. Otherwise false.
-   - If true, provide slug, title (max 9 words), key_fact (max 20 words), why_it_matters (max 16 words, starting with "POR QUÉ IMPORTA: "), visual_prompt (NO text).
+    # Top scrim
+    for y in range(300):
+        alpha = int(220 * (1 - y / 300))
+        scrim_draw.line([(0, y), (CANVAS_WIDTH, y)], fill=(COLOR_BG_CHARCOAL[0], COLOR_BG_CHARCOAL[1], COLOR_BG_CHARCOAL[2], alpha))
 
-Respond strictly with valid JSON conforming to this JSON schema:
-{{
-  "cover": {{
-    "headline": "string (<= 10 words)",
-    "visual_prompt": "string"
-  }},
-  "story_a": {{
-    "slug": "string",
-    "title": "string (<= 9 words)",
-    "key_fact": "string (<= 20 words)",
-    "why_it_matters": "string (<= 16 words, starts with 'POR QUÉ IMPORTA: ')",
-    "source_reference": "string",
-    "visual_prompt": "string"
-  }},
-  "include_card_b": true,
-  "story_b": {{
-    "slug": "string",
-    "title": "string (<= 9 words)",
-    "key_fact": "string (<= 20 words)",
-    "why_it_matters": "string (<= 16 words, starts with 'POR QUÉ IMPORTA: ')",
-    "source_reference": "string",
-    "visual_prompt": "string"
-  }}
-}}
-"""
-        response = client.models.generate_content(
-            model=GEMINI_DEFAULT_MODEL,
-            contents=prompt,
-            config={
-                "response_mime_type": "application/json",
-                "temperature": 0.2
-            }
-        )
+    # Bottom scrim
+    start_y = CANVAS_HEIGHT - bottom_scrim_height
+    for y in range(start_y, CANVAS_HEIGHT):
+        progress = (y - start_y) / float(bottom_scrim_height)
+        alpha = int(245 * (progress ** 1.2))
+        scrim_draw.line([(0, y), (CANVAS_WIDTH, y)], fill=(COLOR_BG_CHARCOAL[0], COLOR_BG_CHARCOAL[1], COLOR_BG_CHARCOAL[2], alpha))
 
-        plan_data = json.loads(response.text)
-        
-        # Validate and enforce strict bounds
-        if "cover" in plan_data and "headline" in plan_data["cover"]:
-            fallback_plan["cover"]["headline"] = clamp_words(plan_data["cover"]["headline"], 10)
-            if plan_data["cover"].get("visual_prompt"):
-                fallback_plan["cover"]["visual_prompt"] = plan_data["cover"]["visual_prompt"]
+    return Image.alpha_composite(canvas, scrim)
 
-        if "story_a" in plan_data:
-            sa = plan_data["story_a"]
-            fallback_plan["story_a"]["title"] = clamp_words(sa.get("title", fallback_story_a_title), 9)
-            fallback_plan["story_a"]["key_fact"] = clamp_words(sa.get("key_fact", fallback_story_a_fact), 20)
-            why_a = sa.get("why_it_matters", fallback_story_a_why)
-            if not why_a.startswith("POR QUÉ IMPORTA:"):
-                why_a = f"POR QUÉ IMPORTA: {why_a}"
-            fallback_plan["story_a"]["why_it_matters"] = clamp_words(why_a, 16)
-            if sa.get("slug"):
-                fallback_plan["story_a"]["slug"] = slugify(sa["slug"])
-            if sa.get("visual_prompt"):
-                fallback_plan["story_a"]["visual_prompt"] = sa["visual_prompt"]
-            if sa.get("source_reference"):
-                fallback_plan["story_a"]["source_reference"] = sa["source_reference"]
 
-        if plan_data.get("include_card_b") and plan_data.get("story_b") and secondary_item:
-            sb = plan_data["story_b"]
-            fallback_plan["include_card_b"] = True
-            why_b = sb.get("why_it_matters", "POR QUÉ IMPORTA: Avance relevante.")
-            if not why_b.startswith("POR QUÉ IMPORTA:"):
-                why_b = f"POR QUÉ IMPORTA: {why_b}"
-            fallback_plan["story_b"] = {
-                "slug": slugify(sb.get("slug", "secondary-story")),
-                "title": clamp_words(sb.get("title", "Avance destacado"), 9),
-                "key_fact": clamp_words(sb.get("key_fact", "Desarrollo técnico verificado."), 20),
-                "why_it_matters": clamp_words(why_b, 16),
-                "source_reference": sb.get("source_reference", fallback_plan.get("story_b", {}).get("source_reference", "Frontier Pulse")),
-                "visual_prompt": sb.get("visual_prompt", "High tech minimal 3d graphic, dark background, no text.")
-            }
+def validate_cover_card_contrast(
+    series_badge_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    series_badge_bg: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+    format_fg: Tuple[int, int, int] = COLOR_TEXT_SAND,
+    format_bg: Tuple[int, int, int] = COLOR_BG_CHARCOAL,
+    headline_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    headline_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    meta_fg: Tuple[int, int, int] = COLOR_TEXT_SAND,
+    meta_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    cta_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    cta_bg: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+) -> None:
+    """Preflight contrast validation for all foreground/background color pairs in the cover card."""
+    assert_render_contrast(series_badge_fg, series_badge_bg, role="large_bold", font_size=FONT_SIZE_BODY, is_bold=True, element_name="cover_series_badge")
+    assert_render_contrast(format_fg, format_bg, role="label", font_size=FONT_SIZE_LABEL, is_bold=False, element_name="cover_format_text")
+    assert_render_contrast(headline_fg, headline_bg, role="large_bold", font_size=FONT_SIZE_COVER_HEADLINE, is_bold=True, element_name="cover_headline")
+    assert_render_contrast(meta_fg, meta_bg, role="body", font_size=FONT_SIZE_META, is_bold=False, element_name="cover_metadata")
+    assert_render_contrast(cta_fg, cta_bg, role="cta", font_size=FONT_SIZE_CTA, is_bold=True, element_name="cover_cta")
+
+
+def validate_insight_card_contrast(
+    label_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    label_bg: Tuple[int, int, int] = COLOR_ACCENT_SAGE,
+    headline_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    headline_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    key_fact_label_fg: Tuple[int, int, int] = COLOR_TEXT_SAND,
+    key_fact_label_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    key_fact_body_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    key_fact_body_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    why_prefix_fg: Tuple[int, int, int] = COLOR_ACCENT_APRICOT,
+    why_prefix_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    why_body_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    why_body_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    footer_fg: Tuple[int, int, int] = COLOR_TEXT_SAND,
+    footer_bg: Tuple[int, int, int] = COLOR_BG_CHARCOAL,
+) -> None:
+    """Preflight contrast validation for all foreground/background color pairs in the insight card."""
+    assert_render_contrast(label_fg, label_bg, role="label", font_size=FONT_SIZE_LABEL, is_bold=True, element_name="insight_label")
+    assert_render_contrast(headline_fg, headline_bg, role="large_bold", font_size=FONT_SIZE_INSIGHT_HEADLINE, is_bold=True, element_name="insight_headline")
+    assert_render_contrast(key_fact_label_fg, key_fact_label_bg, role="label", font_size=FONT_SIZE_LABEL, is_bold=True, element_name="insight_key_fact_label")
+    assert_render_contrast(key_fact_body_fg, key_fact_body_bg, role="body", font_size=FONT_SIZE_BODY, is_bold=False, element_name="insight_key_fact_body")
+    assert_render_contrast(why_prefix_fg, why_prefix_bg, role="body", font_size=FONT_SIZE_BODY, is_bold=True, element_name="insight_why_prefix")
+    assert_render_contrast(why_body_fg, why_body_bg, role="body", font_size=FONT_SIZE_BODY, is_bold=False, element_name="insight_why_body")
+    assert_render_contrast(footer_fg, footer_bg, role="body", font_size=FONT_SIZE_FOOTER, is_bold=True, element_name="insight_footer")
+
+
+def validate_roundup_card_contrast(
+    label_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    label_bg: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+    headline_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    headline_bg: Tuple[int, int, int] = COLOR_BG_CHARCOAL,
+    row_title_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    row_title_bg: Tuple[int, int, int] = COLOR_SURFACE_INK,
+    row_num_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    row_num_bg: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+    cta_fg: Tuple[int, int, int] = COLOR_TEXT_IVORY,
+    cta_bg: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+    footer_fg: Tuple[int, int, int] = COLOR_TEXT_SAND,
+    footer_bg: Tuple[int, int, int] = COLOR_BG_CHARCOAL,
+) -> None:
+    """Preflight contrast validation for all foreground/background color pairs in the roundup card."""
+    assert_render_contrast(label_fg, label_bg, role="label", font_size=FONT_SIZE_LABEL, is_bold=True, element_name="roundup_label")
+    assert_render_contrast(headline_fg, headline_bg, role="large_bold", font_size=FONT_SIZE_ROUNDUP_HEADLINE, is_bold=True, element_name="roundup_headline")
+    assert_render_contrast(row_title_fg, row_title_bg, role="body", font_size=FONT_SIZE_BODY, is_bold=False, element_name="roundup_story_rows")
+    assert_render_contrast(row_num_fg, row_num_bg, role="label", font_size=24, is_bold=True, element_name="roundup_number_badge")
+    assert_render_contrast(cta_fg, cta_bg, role="cta", font_size=FONT_SIZE_CTA, is_bold=True, element_name="roundup_cta")
+    assert_render_contrast(footer_fg, footer_bg, role="body", font_size=FONT_SIZE_FOOTER, is_bold=True, element_name="roundup_footer")
+
+
+def render_cover_card(
+    cover_data: CoverCardText,
+    background_image: Optional[Image.Image] = None,
+    scene_mode: str = "neutral",
+    color_overrides: Optional[Dict[str, Tuple[int, int, int]]] = None
+) -> Image.Image:
+    """Deterministically render AR-01 Cover Card (1080x1350 px)."""
+    # 0. Preflight contrast validation
+    overrides = color_overrides or {}
+    validate_cover_card_contrast(**overrides)
+
+    series_badge_fg = overrides.get("series_badge_fg", COLOR_TEXT_IVORY)
+    series_badge_bg = overrides.get("series_badge_bg", COLOR_ACCENT_TERRACOTTA)
+    format_fg = overrides.get("format_fg", COLOR_TEXT_SAND)
+    headline_fg = overrides.get("headline_fg", COLOR_TEXT_IVORY)
+    meta_fg = overrides.get("meta_fg", COLOR_TEXT_SAND)
+    cta_fg = overrides.get("cta_fg", COLOR_TEXT_IVORY)
+    cta_bg = overrides.get("cta_bg", COLOR_ACCENT_TERRACOTTA)
+
+    if background_image is not None:
+        canvas = background_image.resize((CANVAS_WIDTH, CANVAS_HEIGHT), Image.Resampling.LANCZOS).convert("RGBA")
+        canvas = apply_dark_scrim(canvas, bottom_scrim_height=750)
+    else:
+        canvas = create_base_gradient_background(scene_mode=scene_mode)
+
+    # Headline geometry calculation
+    headline_font = get_font(FONT_SIZE_COVER_HEADLINE, bold=True)
+    dummy_draw = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
+    wrapped_headline = wrap_text(cover_data.headline, headline_font, CONTENT_WIDTH - 60, dummy_draw)
+    line_height = int(FONT_SIZE_COVER_HEADLINE * HEADLINE_LINE_HEIGHT_RATIO)
+    headline_block_height = len(wrapped_headline) * line_height
+
+    card_y = CANVAS_HEIGHT - SAFE_MARGIN_Y - 430 - (headline_block_height - 150)
+    card_y = max(480, card_y)
+    card_height = headline_block_height + 270
+    card_box = (SAFE_MARGIN_X, card_y, CANVAS_WIDTH - SAFE_MARGIN_X, card_y + card_height)
+
+    # Composite Pulse character avoiding cover text container
+    canvas = composite_pulse_on_canvas(
+        canvas,
+        mode=scene_mode,
+        target_height=420,
+        position=(580, 160),
+        opacity=0.95,
+        forbidden_zones=[card_box]
+    )
+
+    overlay = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    # 1. Top Series Badge & Format Subtitle
+    top_y = SAFE_MARGIN_Y + 10
+    font_series = get_font(FONT_SIZE_BODY, bold=True)
+    font_format = get_font(FONT_SIZE_LABEL, bold=False)  # >= 24 px
+
+    # Series pill badge
+    series_text = cover_data.series.upper()
+    s_bbox = draw.textbbox((0, 0), series_text, font=font_series)
+    s_w = (s_bbox[2] - s_bbox[0]) + 36
+    s_h = 46
+    draw_rounded_card(
+        draw,
+        (SAFE_MARGIN_X, top_y, SAFE_MARGIN_X + s_w, top_y + s_h),
+        radius=14,
+        fill=(series_badge_bg[0], series_badge_bg[1], series_badge_bg[2], 230),
+        outline=None
+    )
+    draw.text((SAFE_MARGIN_X + 18, top_y + 8), series_text, font=font_series, fill=series_badge_fg)
+
+    # Format line beneath series badge (>= 24 px)
+    format_y = top_y + s_h + 12
+    draw.text((SAFE_MARGIN_X, format_y), cover_data.format.upper(), font=font_format, fill=format_fg)
+
+    # 2. Main Headline Card Surface (Center-Bottom)
+    draw_rounded_card(draw, card_box, radius=24, fill=COLOR_CARD_SURFACE_OPAQUE, outline=COLOR_CARD_BORDER_TERRACOTTA, width=2)
+
+    # Draw headline lines
+    text_y = card_y + 35
+    for line in wrapped_headline:
+        draw.text((SAFE_MARGIN_X + 30, text_y), line, font=headline_font, fill=headline_fg)
+        text_y += line_height
+
+    # Tactile accent gesture
+    draw_terracotta_brush_stroke(draw, (SAFE_MARGIN_X + 30, text_y + 8), (SAFE_MARGIN_X + 260, text_y + 12), stroke_width=8, opacity=200)
+
+    # 3. Metadata Line (Episode & Duration)
+    meta_y = text_y + 28
+    font_meta = get_font(FONT_SIZE_META, bold=False)
+    draw.text((SAFE_MARGIN_X + 30, meta_y), cover_data.metadata, font=font_meta, fill=meta_fg)
+
+    # 4. CTA Button (Ivory on Terracotta, 30 px bold)
+    cta_y = meta_y + 48
+    font_cta = get_font(FONT_SIZE_CTA, bold=True)
+    # The bundled display font does not include a reliable play-glyph.  Keep
+    # the label textual and render the play icon as geometry below instead.
+    cta_text = cover_data.cta.lstrip("▶▷▸ ").strip()
+    cta_bbox = draw.textbbox((0, 0), cta_text, font=font_cta)
+    cta_w = (cta_bbox[2] - cta_bbox[0]) + 104
+    cta_h = 56
+
+    cta_box = (SAFE_MARGIN_X + 30, cta_y, SAFE_MARGIN_X + 30 + cta_w, cta_y + cta_h)
+    draw_rounded_card(
+        draw,
+        cta_box,
+        radius=16,
+        fill=(cta_bg[0], cta_bg[1], cta_bg[2], 255),
+        outline=None
+    )
+    icon_x = SAFE_MARGIN_X + 50
+    icon_y = cta_y + 19
+    draw.polygon(
+        [(icon_x, icon_y), (icon_x, icon_y + 20), (icon_x + 17, icon_y + 10)],
+        fill=cta_fg,
+    )
+    draw.text((SAFE_MARGIN_X + 80, cta_y + 11), cta_text, font=font_cta, fill=cta_fg)
+
+    # Combine layers and apply tactile paper grain overlay
+    combined = Image.alpha_composite(canvas, overlay)
+    grained = apply_paper_grain(combined, intensity=0.035)
+
+    return grained.convert("RGB")
+
+
+def render_insight_card(
+    insight_data: InsightCardText,
+    background_image: Optional[Image.Image] = None,
+    scene_mode: str = "analyst",
+    accent_border: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
+    color_overrides: Optional[Dict[str, Tuple[int, int, int]]] = None
+) -> Image.Image:
+    """Deterministically render AR-02 / AR-03 News Insight Card on controlled reading surfaces."""
+    # 0. Preflight contrast validation
+    overrides = color_overrides or {}
+    validate_insight_card_contrast(**overrides)
+
+    label_fg = overrides.get("label_fg", COLOR_TEXT_IVORY)
+    label_bg = overrides.get("label_bg", COLOR_ACCENT_SAGE)
+    headline_fg = overrides.get("headline_fg", COLOR_TEXT_IVORY)
+    key_fact_label_fg = overrides.get("key_fact_label_fg", COLOR_TEXT_SAND)
+    key_fact_body_fg = overrides.get("key_fact_body_fg", COLOR_TEXT_IVORY)
+    why_prefix_fg = overrides.get("why_prefix_fg", COLOR_ACCENT_APRICOT)
+    why_body_fg = overrides.get("why_body_fg", COLOR_TEXT_IVORY)
+    footer_fg = overrides.get("footer_fg", COLOR_TEXT_SAND)
+
+    if background_image is not None:
+        canvas = background_image.resize((CANVAS_WIDTH, CANVAS_HEIGHT), Image.Resampling.LANCZOS).convert("RGBA")
+        canvas = apply_dark_scrim(canvas, bottom_scrim_height=850)
+    else:
+        canvas = create_base_gradient_background(scene_mode=scene_mode)
+
+    dummy_draw = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
+
+    # 1. Measure and build Top Headline Card (Left Column)
+    top_y = SAFE_MARGIN_Y + 10
+    font_badge = get_font(FONT_SIZE_LABEL, bold=True)
+    badge_label = insight_data.label.upper()
+    badge_bbox = dummy_draw.textbbox((0, 0), badge_label, font=font_badge)
+    badge_w = (badge_bbox[2] - badge_bbox[0]) + 32
+    badge_h = 42
+
+    font_title = get_font(FONT_SIZE_INSIGHT_HEADLINE, bold=True)
+    headline_max_width = 540  # Reserved width to leave right side clear for Pulse character
+    title_lines = wrap_text(insight_data.title, font_title, headline_max_width, dummy_draw)
+    title_lh = int(FONT_SIZE_INSIGHT_HEADLINE * HEADLINE_LINE_HEIGHT_RATIO)
+    title_block_h = len(title_lines) * title_lh
+
+    top_card_w = 580
+    top_card_h = badge_h + 20 + title_block_h + 24
+    top_card_box = (SAFE_MARGIN_X, top_y, SAFE_MARGIN_X + top_card_w, top_y + top_card_h)
+
+    # Composite Pulse character in upper right (position: 650, 140) avoiding top card
+    canvas = composite_pulse_on_canvas(
+        canvas,
+        mode=scene_mode,
+        target_height=370,
+        position=(650, 140),
+        opacity=0.92,
+        forbidden_zones=[top_card_box]
+    )
+
+    overlay = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    # Draw controlled Top Headline Reading Surface
+    draw_rounded_card(
+        draw,
+        top_card_box,
+        radius=20,
+        fill=COLOR_CARD_SURFACE_OPAQUE,
+        outline=COLOR_CARD_BORDER_SUBTLE,
+        width=1
+    )
+
+    # Top Badge inside headline card
+    draw_rounded_card(
+        draw,
+        (SAFE_MARGIN_X + 20, top_y + 16, SAFE_MARGIN_X + 20 + badge_w, top_y + 16 + badge_h),
+        radius=12,
+        fill=(label_bg[0], label_bg[1], label_bg[2], 220),
+        outline=None
+    )
+    draw.text((SAFE_MARGIN_X + 36, top_y + 24), badge_label, font=font_badge, fill=label_fg)
+
+    # Title lines inside headline card
+    title_y = top_y + 16 + badge_h + 16
+    for line in title_lines:
+        draw.text((SAFE_MARGIN_X + 20, title_y), line, font=font_title, fill=headline_fg)
+        title_y += title_lh
+
+    # 2. Key Fact Container (Spans full content width)
+    fact_card_y = max(top_y + top_card_h + 24, 530)
+    font_fact_label = get_font(FONT_SIZE_LABEL, bold=True)  # >= 24 px
+    font_fact_text = get_font(FONT_SIZE_BODY, bold=False)   # 30 px
+
+    fact_lines = wrap_text(insight_data.key_fact, font_fact_text, CONTENT_WIDTH - 60, draw)
+    fact_lh = 42
+    fact_box_h = 45 + (len(fact_lines) * fact_lh) + 25
+    fact_box = (SAFE_MARGIN_X, fact_card_y, CANVAS_WIDTH - SAFE_MARGIN_X, fact_card_y + fact_box_h)
+
+    draw_rounded_card(draw, fact_box, radius=20, fill=COLOR_CARD_SURFACE_OPAQUE, outline=COLOR_CARD_BORDER_SUBTLE, width=1)
+    
+    # Section Label (24 px bold Sand) - strictly English if not Spanish
+    is_spanish = ("es" in insight_data.footer.lower() or "episodio" in insight_data.footer.lower() or "semana" in insight_data.label.lower()) and "episode" not in insight_data.footer.lower()
+    fact_label_text = "HECHO CLAVE" if is_spanish else "KEY FACT"
+    draw.text((SAFE_MARGIN_X + 30, fact_card_y + 20), fact_label_text, font=font_fact_label, fill=key_fact_label_fg)
+    fact_text_y = fact_card_y + 55
+    for line in fact_lines:
+        draw.text((SAFE_MARGIN_X + 30, fact_text_y), line, font=font_fact_text, fill=key_fact_body_fg)
+        fact_text_y += fact_lh
+
+    # 3. Why It Matters Container (Highlighted with Terracotta/Apricot Accent Border)
+    why_card_y = fact_card_y + fact_box_h + 22
+    font_why_text = get_font(FONT_SIZE_BODY, bold=False)  # 30 px
+    font_why_bold = get_font(FONT_SIZE_BODY, bold=True)   # 30 px bold
+
+    why_text = insight_data.why_it_matters.strip()
+    why_lines = wrap_text(why_text, font_why_text, CONTENT_WIDTH - 60, draw)
+    why_lh = 42
+    why_box_h = 30 + (len(why_lines) * why_lh) + 25
+    why_box = (SAFE_MARGIN_X, why_card_y, CANVAS_WIDTH - SAFE_MARGIN_X, why_card_y + why_box_h)
+
+    draw_rounded_card(
+        draw,
+        why_box,
+        radius=20,
+        fill=COLOR_CARD_SURFACE_OPAQUE,
+        outline=(accent_border[0], accent_border[1], accent_border[2], 180),
+        width=2
+    )
+
+    why_text_y = why_card_y + 24
+    for line_idx, line in enumerate(why_lines):
+        # Support both Spanish ("POR QUÉ IMPORTA:") and English ("WHY IT MATTERS:") prefixes
+        prefix = None
+        if line_idx == 0:
+            if line.startswith("POR QUÉ IMPORTA:"):
+                prefix = "POR QUÉ IMPORTA:"
+            elif line.startswith("WHY IT MATTERS:"):
+                prefix = "WHY IT MATTERS:"
+
+        if prefix:
+            rest = line[len(prefix):].lstrip()
+            draw.text((SAFE_MARGIN_X + 30, why_text_y), prefix, font=font_why_bold, fill=why_prefix_fg)
+            prefix_bbox = draw.textbbox((SAFE_MARGIN_X + 30, why_text_y), prefix, font=font_why_bold)
+            draw.text((prefix_bbox[2] + 10, why_text_y), rest, font=font_why_text, fill=why_body_fg)
         else:
-            fallback_plan["include_card_b"] = False
-            fallback_plan["story_b"] = None
+            draw.text((SAFE_MARGIN_X + 30, why_text_y), line, font=font_why_text, fill=why_body_fg)
+        why_text_y += why_lh
 
-    except Exception as e:
-        print(f"[visual_asset_generator] Notice: Gemini card planning fallback used: {e}")
+    # 4. Footer Line (Fixed at bottom safe margin)
+    footer_y = CANVAS_HEIGHT - SAFE_MARGIN_Y - 30
+    font_footer = get_font(FONT_SIZE_FOOTER, bold=True)
+    draw.text((SAFE_MARGIN_X, footer_y), insight_data.footer.upper(), font=font_footer, fill=footer_fg)
 
-    return fallback_plan
+    combined = Image.alpha_composite(canvas, overlay)
+    grained = apply_paper_grain(combined, intensity=0.035)
+
+    return grained.convert("RGB")
+
+
+def render_context_card(
+    context_data: EditionContextCardText,
+    background_image: Optional[Image.Image] = None,
+    scene_mode: str = "analyst",
+    why_it_matters: Optional[str] = None,
+    language: str = "es",
+    color_overrides: Optional[Dict[str, Tuple[int, int, int]]] = None
+) -> Image.Image:
+    """Render AR-03 Fallback Context Card when fewer than 2 news items are present."""
+    if why_it_matters is None:
+        if language.lower().startswith("en") or "episode" in context_data.footer.lower() or "context" in context_data.label.lower():
+            why_it_matters = "WHY IT MATTERS: In-depth analysis and strategic context for engineering teams."
+        else:
+            why_it_matters = "POR QUÉ IMPORTA: Análisis y perspectiva para el equipo."
+
+    insight_proxy = InsightCardText(
+        label=context_data.label,
+        title=context_data.title,
+        key_fact=context_data.context_text,
+        why_it_matters=why_it_matters,
+        footer=context_data.footer
+    )
+    return render_insight_card(
+        insight_proxy,
+        background_image=background_image,
+        scene_mode=scene_mode,
+        accent_border=COLOR_ACCENT_APRICOT,
+        color_overrides=color_overrides
+    )
+
+
+def render_roundup_card(
+    roundup_data: RoundupCardText,
+    background_image: Optional[Image.Image] = None,
+    color_overrides: Optional[Dict[str, Tuple[int, int, int]]] = None
+) -> Image.Image:
+    """Deterministically render AR-04 Closing Radar Card (1080x1350 px)."""
+    # 0. Preflight contrast validation
+    overrides = color_overrides or {}
+    validate_roundup_card_contrast(**overrides)
+
+    headline_fg = overrides.get("headline_fg", COLOR_TEXT_IVORY)
+    row_title_fg = overrides.get("row_title_fg", COLOR_TEXT_IVORY)
+    cta_fg = overrides.get("cta_fg", COLOR_TEXT_IVORY)
+    cta_bg = overrides.get("cta_bg", COLOR_ACCENT_TERRACOTTA)
+    footer_fg = overrides.get("footer_fg", COLOR_TEXT_SAND)
+
+    if background_image is not None:
+        canvas = background_image.resize((CANVAS_WIDTH, CANVAS_HEIGHT), Image.Resampling.LANCZOS).convert("RGBA")
+        canvas = apply_dark_scrim(canvas, bottom_scrim_height=900)
+    else:
+        canvas = create_base_gradient_background(scene_mode="narrator")
+
+    left_column_width = 510
+    left_forbidden_box = (SAFE_MARGIN_X, SAFE_MARGIN_Y, SAFE_MARGIN_X + left_column_width, CANVAS_HEIGHT - SAFE_MARGIN_Y)
+
+    # Composite Pulse in Narrator mode at microphone on the right side
+    canvas = composite_pulse_on_canvas(
+        canvas,
+        mode="narrator",
+        target_height=480,
+        position=(570, 320),
+        opacity=0.98,
+        forbidden_zones=[left_forbidden_box]
+    )
+
+    overlay = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    # 1. Concise section heading.  There is deliberately no redundant
+    # "Closing Radar" badge: the list itself is the visual signal.
+    top_y = SAFE_MARGIN_Y + 10
+    # 2. Main Headline (54 px bold)
+    title_y = top_y
+    font_title = get_font(FONT_SIZE_ROUNDUP_HEADLINE, bold=True)
+    title_lines = wrap_text(roundup_data.headline, font_title, CONTENT_WIDTH, draw)
+    title_lh = int(FONT_SIZE_ROUNDUP_HEADLINE * HEADLINE_LINE_HEIGHT_RATIO)
+    for line in title_lines:
+        draw.text((SAFE_MARGIN_X, title_y), line, font=font_title, fill=headline_fg)
+        title_y += title_lh
+
+    # 3. Clean Left Column: remaining news as simple bullet points.
+    items_start_y = title_y + 35
+    font_item = get_font(FONT_SIZE_BODY, bold=False)  # >= 30 px
+
+    current_item_y = items_start_y
+    for title in roundup_data.remaining_titles:
+        item_lines = wrap_text(title, font_item, left_column_width - 40, draw)
+        bullet_box = [SAFE_MARGIN_X, current_item_y + 12, SAFE_MARGIN_X + 14, current_item_y + 26]
+        draw.ellipse(bullet_box, fill=COLOR_ACCENT_TERRACOTTA)
+
+        line_y = current_item_y
+        for l in item_lines:
+            draw.text((SAFE_MARGIN_X + 30, line_y), l, font=font_item, fill=row_title_fg)
+            line_y += 38
+
+        current_item_y += max(50, len(item_lines) * 38) + 20
+
+    # 4. CTA Button (30 px bold)
+    cta_y = max(current_item_y + 30, CANVAS_HEIGHT - SAFE_MARGIN_Y - 140)
+    font_cta = get_font(FONT_SIZE_CTA, bold=True)
+    cta_text = roundup_data.cta.strip()
+    cta_bbox = draw.textbbox((0, 0), cta_text, font=font_cta)
+    cta_w = (cta_bbox[2] - cta_bbox[0]) + 48
+    cta_h = 58
+
+    cta_box = (SAFE_MARGIN_X, cta_y, SAFE_MARGIN_X + cta_w, cta_y + cta_h)
+    draw_rounded_card(
+        draw,
+        cta_box,
+        radius=16,
+        fill=(cta_bg[0], cta_bg[1], cta_bg[2], 255),
+        outline=None
+    )
+    draw.text((SAFE_MARGIN_X + 24, cta_y + 12), cta_text, font=font_cta, fill=cta_fg)
+
+    # 5. Footer
+    footer_y = CANVAS_HEIGHT - SAFE_MARGIN_Y - 30
+    font_footer = get_font(FONT_SIZE_FOOTER, bold=True)
+    draw.text((SAFE_MARGIN_X, footer_y), roundup_data.footer.upper(), font=font_footer, fill=footer_fg)
+
+    combined = Image.alpha_composite(canvas, overlay)
+    grained = apply_paper_grain(combined, intensity=0.035)
+
+    return grained.convert("RGB")
 
 
 def generate_background_artwork(prompt: str) -> Optional[Image.Image]:
-    """Generate AI background illustration without text using Gemini or Imagen 3."""
+    """Generate AI background artwork without readable text using Gemini Image Generation or Imagen 3."""
     try:
         client = get_genai_client()
-        clean_prompt = f"{prompt.strip()}. Atmospheric, minimalist 3D rendering, dark modern tech aesthetic, ultra high resolution, cinematic lighting, absolutely NO text, NO typography, NO watermark, NO letters, NO words."
+        clean_prompt = prompt.strip()
         
-        # Try gemini-3.1-flash-image
+        # 1. Try gemini-3.1-flash-image
         try:
             resp = client.models.generate_content(
                 model="gemini-3.1-flash-image",
                 contents=clean_prompt,
             )
-            for part in resp.candidates[0].content.parts:
-                if part.inline_data:
-                    from io import BytesIO
-                    raw_bytes = part.inline_data.data
-                    if isinstance(raw_bytes, str):
-                        raw_bytes = base64.b64decode(raw_bytes)
-                    return Image.open(BytesIO(raw_bytes))
+            if resp.candidates and resp.candidates[0].content:
+                for part in resp.candidates[0].content.parts:
+                    if getattr(part, "inline_data", None) and part.inline_data.data:
+                        from io import BytesIO
+                        raw_bytes = part.inline_data.data
+                        if isinstance(raw_bytes, str):
+                            raw_bytes = base64.b64decode(raw_bytes)
+                        return Image.open(BytesIO(raw_bytes))
         except Exception as e:
             print(f"[visual_asset_generator] Flash image background call failed: {e}")
 
-        # Fallback to imagen-3.0-generate-002
+        # 2. Try imagen-3.0-generate-002
         try:
             resp = client.models.generate_images(
                 model="imagen-3.0-generate-002",
@@ -635,6 +688,65 @@ def generate_background_artwork(prompt: str) -> Optional[Image.Image]:
     return None
 
 
+def validate_four_card_asset_set(
+    manifest_path_str: Optional[str],
+    edition_dir: Path,
+    expected_episode_number: int
+) -> Tuple[bool, str]:
+    """Validate that a previously generated visual asset manifest and its 4 cards are fully complete and valid.
+
+    Checks:
+    - Manifest file exists and parses as VisualAssetManifest.
+    - Contains exactly four assets.
+    - Display orders are strictly [1, 2, 3, 4].
+    - Expected file patterns exist: cover, insight A, insight B/context, roundup.
+    - Each file is a valid 1080x1350 PNG image.
+    """
+    if not manifest_path_str:
+        return False, "No manifest path string provided."
+
+    manifest_path = Path(manifest_path_str)
+    if not manifest_path.exists():
+        return False, f"Manifest file does not exist: {manifest_path}"
+
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        manifest = VisualAssetManifest.model_validate(data)
+    except Exception as e:
+        return False, f"Manifest validation error: {e}"
+
+    if len(manifest.assets) != 4:
+        return False, f"Manifest contains {len(manifest.assets)} assets (expected exactly 4)."
+
+    orders = [a.display_order for a in manifest.assets]
+    if orders != [1, 2, 3, 4]:
+        return False, f"Asset display orders are {orders} (expected [1, 2, 3, 4])."
+
+    types = [a.type for a in manifest.assets]
+    if types[0] != "cover" or types[3] != "news_roundup":
+        return False, f"Unexpected asset types sequence: {types}"
+
+    if types[1] != "news_insight" or types[2] not in ["news_insight", "edition_context"]:
+        return False, f"Unexpected asset types sequence: {types}"
+
+    # Verify each image on disk
+    for item in manifest.assets:
+        img_path = edition_dir / item.file
+        if not img_path.exists():
+            return False, f"Asset file missing on disk: {img_path}"
+        try:
+            with Image.open(img_path) as img:
+                if img.format != "PNG":
+                    return False, f"Asset file {item.file} is not PNG format (found {img.format})."
+                if img.size != (CANVAS_WIDTH, CANVAS_HEIGHT):
+                    return False, f"Asset file {item.file} has invalid dimensions {img.size} (expected {(CANVAS_WIDTH, CANVAS_HEIGHT)})."
+        except Exception as e:
+            return False, f"Corrupted asset image {item.file}: {e}"
+
+    return True, "Valid 4-card asset set."
+
+
 def generate_visual_assets(
     news_data: dict,
     edition_date: str,
@@ -642,52 +754,64 @@ def generate_visual_assets(
     audio_duration_minutes: Optional[int] = 4,
     language: str = PODCAST_LANGUAGE_ES
 ) -> Tuple[VisualAssetManifest, dict]:
-    """Generate all visual assets (Cover + Insight Cards + Manifest) for an edition.
+    """Generate all 4 visual assets (Cover + Insight Cards + Roundup + Manifest) for an edition.
 
     Outputs:
     - episode-[number]-01-cover.png
-    - episode-[number]-02-insight-[topic-a].png
-    - episode-[number]-03-insight-[topic-b].png (optional)
+    - episode-[number]-02-insight-[slug-a].png
+    - episode-[number]-03-insight-[slug-b].png (or context fallback)
+    - episode-[number]-04-news-roundup.png
     - episode-[number]-assets.json
     - podcast_cover.jpg (for backward compatibility with Telegram publisher)
     """
     edition_dir = get_edition_dir(edition_date)
     ep_num = episode_number or get_episode_number(edition_date)
     dur_min = audio_duration_minutes or 4
+    lang_code = "es" if "es" in language.lower() else "en"
 
-    # 1. Plan card contents
-    plan = plan_visual_card_contents(
+    # 1. Formulate 4-card editorial plan
+    plan = plan_editorial_cards(
         news_data=news_data,
         episode_number=ep_num,
         duration_minutes=dur_min,
-        language="es" if "es" in language.lower() else "en"
+        language=lang_code
     )
 
     manifest_assets: List[VisualAssetItem] = []
     generated_file_paths: dict = {}
+    footer_text = f"FRONTIER PULSE · EPISODIO {ep_num}" if lang_code == "es" else f"FRONTIER PULSE · EPISODE {ep_num}"
 
+    # ==========================================================================
     # 2. Render AR-01 Cover Card
-    cover_headline = plan["cover"]["headline"]
-    cover_meta = f"Episodio {ep_num} · {dur_min} min" if "es" in language.lower() else f"Episode {ep_num} · {dur_min} min"
-    cover_cta = "▶ Escuchar ahora" if "es" in language.lower() else "▶ Listen now"
-    cover_format = "PODCAST SEMANAL DE NOTICIAS DE IA" if "es" in language.lower() else "WEEKLY AI NEWS PODCAST"
+    # ==========================================================================
+    cover_info = plan["cover"]
+    cover_meta = f"Episodio {ep_num} · {dur_min} min" if lang_code == "es" else f"Episode {ep_num} · {dur_min} min"
+    cover_cta = "▶ Escuchar ahora" if lang_code == "es" else "▶ Listen now"
+    cover_format = "PODCAST SEMANAL DE IA" if lang_code == "es" else "WEEKLY AI PODCAST"
 
     cover_text_model = CoverCardText(
         series="FRONTIER PULSE",
         format=cover_format,
-        headline=cover_headline,
+        headline=cover_info["headline"],
         metadata=cover_meta,
         cta=cover_cta
     )
 
-    # Generate background artwork for cover
-    bg_cover = generate_background_artwork(plan["cover"]["visual_prompt"])
-    cover_img = render_cover_card(cover_text_model, background_image=bg_cover, accent_color=COLOR_ACCENT_CYAN)
+    prompt_cover = build_scene_prompt("cover", cover_info.get("scene_mode", "neutral"), cover_info.get("scene_subject"))
+    bg_cover = generate_background_artwork(prompt_cover)
+    cover_img = render_cover_card(cover_text_model, background_image=bg_cover, scene_mode=cover_info.get("scene_mode", "neutral"))
 
     cover_filename = f"episode-{ep_num}-01-cover.png"
     cover_path = edition_dir / cover_filename
     cover_img.save(cover_path, format="PNG")
     generated_file_paths["cover"] = cover_path
+
+    # Save backward-compatible podcast_cover.jpg in edition and legacy output dirs
+    jpg_path_edition = edition_dir / "podcast_cover.jpg"
+    jpg_path_legacy = OUTPUT_DIR / "podcast_cover.jpg"
+    cover_img.save(jpg_path_edition, format="JPEG", quality=92)
+    cover_img.save(jpg_path_legacy, format="JPEG", quality=92)
+    generated_file_paths["podcast_cover_jpg"] = jpg_path_edition
 
     manifest_assets.append(
         VisualAssetItem(
@@ -699,22 +823,29 @@ def generate_visual_assets(
         )
     )
 
+    # ==========================================================================
     # 3. Render AR-02 News Insight Card A
+    # ==========================================================================
     story_a = plan["story_a"]
     slug_a = story_a["slug"]
-    insight_a_label = "ESTA SEMANA EN IA" if "es" in language.lower() else "THIS WEEK IN AI"
-    footer_text = f"FRONTIER PULSE · EPISODIO {ep_num}" if "es" in language.lower() else f"FRONTIER PULSE · EPISODE {ep_num}"
+    label_a = "ESTA SEMANA EN IA" if lang_code == "es" else "THIS WEEK IN AI"
 
     insight_a_text_model = InsightCardText(
-        label=insight_a_label,
+        label=label_a,
         title=story_a["title"],
         key_fact=story_a["key_fact"],
         why_it_matters=story_a["why_it_matters"],
         footer=footer_text
     )
 
-    bg_a = generate_background_artwork(story_a["visual_prompt"])
-    insight_a_img = render_insight_card(insight_a_text_model, background_image=bg_a, accent_color=COLOR_ACCENT_CYAN)
+    prompt_a = build_scene_prompt("insight", story_a.get("scene_mode", "analyst"), story_a.get("scene_subject"))
+    bg_a = generate_background_artwork(prompt_a)
+    insight_a_img = render_insight_card(
+        insight_a_text_model,
+        background_image=bg_a,
+        scene_mode=story_a.get("scene_mode", "analyst"),
+        accent_border=COLOR_ACCENT_TERRACOTTA
+    )
 
     insight_a_filename = f"episode-{ep_num}-02-insight-{slug_a}.png"
     insight_a_path = edition_dir / insight_a_filename
@@ -732,29 +863,68 @@ def generate_visual_assets(
         )
     )
 
-    # 4. Render AR-03 News Insight Card B (Optional)
-    if plan.get("include_card_b") and plan.get("story_b"):
-        story_b = plan["story_b"]
-        slug_b = story_b["slug"]
+    # ==========================================================================
+    # 4. Render AR-03 News Insight Card B (or Fallback Context)
+    # ==========================================================================
+    story_b = plan["story_b"]
+    slug_b = story_b["slug"]
+    is_fallback_context = story_b.get("is_fallback_context", False)
+
+    prompt_b = build_scene_prompt("insight", story_b.get("scene_mode", "analyst"), story_b.get("scene_subject"))
+    bg_b = generate_background_artwork(prompt_b)
+
+    if is_fallback_context:
+        context_text_model = EditionContextCardText(
+            label="CONTEXTO DE LA EDICIÓN" if lang_code == "es" else "EDITION CONTEXT",
+            title=story_b["title"],
+            context_text=story_b["key_fact"],
+            cta="▶ Escucha el episodio completo" if lang_code == "es" else "▶ Listen to the full episode",
+            footer=footer_text
+        )
+        card_b_filename = f"episode-{ep_num}-03-insight-{slug_b}.png"
+        card_b_path = edition_dir / card_b_filename
+        insight_b_img = render_context_card(
+            context_text_model,
+            background_image=bg_b,
+            scene_mode=story_b.get("scene_mode", "analyst"),
+            why_it_matters=story_b.get("why_it_matters"),
+            language=lang_code
+        )
+        insight_b_img.save(card_b_path, format="PNG")
+        generated_file_paths["insight_b"] = card_b_path
+
+        manifest_assets.append(
+            VisualAssetItem(
+                file=card_b_filename,
+                type="edition_context",
+                display_order=3,
+                suggested_screen_time_seconds=5,
+                text=context_text_model,
+                source_reference=story_b.get("source_reference")
+            )
+        )
+    else:
         insight_b_text_model = InsightCardText(
-            label=insight_a_label,
+            label=label_a,
             title=story_b["title"],
             key_fact=story_b["key_fact"],
             why_it_matters=story_b["why_it_matters"],
             footer=footer_text
         )
-
-        bg_b = generate_background_artwork(story_b["visual_prompt"])
-        insight_b_img = render_insight_card(insight_b_text_model, background_image=bg_b, accent_color=COLOR_ACCENT_VIOLET)
-
-        insight_b_filename = f"episode-{ep_num}-03-insight-{slug_b}.png"
-        insight_b_path = edition_dir / insight_b_filename
-        insight_b_img.save(insight_b_path, format="PNG")
-        generated_file_paths["insight_b"] = insight_b_path
+        card_b_filename = f"episode-{ep_num}-03-insight-{slug_b}.png"
+        card_b_path = edition_dir / card_b_filename
+        insight_b_img = render_insight_card(
+            insight_b_text_model,
+            background_image=bg_b,
+            scene_mode=story_b.get("scene_mode", "analyst"),
+            accent_border=COLOR_ACCENT_APRICOT
+        )
+        insight_b_img.save(card_b_path, format="PNG")
+        generated_file_paths["insight_b"] = card_b_path
 
         manifest_assets.append(
             VisualAssetItem(
-                file=insight_b_filename,
+                file=card_b_filename,
                 type="news_insight",
                 display_order=3,
                 suggested_screen_time_seconds=5,
@@ -763,7 +933,42 @@ def generate_visual_assets(
             )
         )
 
-    # 5. Build and Save Visual Asset Manifest (JSON)
+    # ==========================================================================
+    # 5. Render AR-04 Closing Radar Card (news_roundup)
+    # ==========================================================================
+    roundup_info = plan["roundup"]
+    roundup_headline = "También esta semana" if lang_code == "es" else "Also this week"
+    roundup_cta = "Escucha el episodio completo" if lang_code == "es" else "Listen to the full episode"
+
+    roundup_text_model = RoundupCardText(
+        headline=roundup_headline,
+        remaining_titles=roundup_info["remaining_titles"],
+        cta=roundup_cta,
+        footer=footer_text
+    )
+
+    prompt_roundup = build_scene_prompt("roundup", "narrator", roundup_info.get("scene_subject"))
+    bg_roundup = generate_background_artwork(prompt_roundup)
+    roundup_img = render_roundup_card(roundup_text_model, background_image=bg_roundup)
+
+    roundup_filename = f"episode-{ep_num}-04-news-roundup.png"
+    roundup_path = edition_dir / roundup_filename
+    roundup_img.save(roundup_path, format="PNG")
+    generated_file_paths["roundup"] = roundup_path
+
+    manifest_assets.append(
+        VisualAssetItem(
+            file=roundup_filename,
+            type="news_roundup",
+            display_order=4,
+            suggested_screen_time_seconds=8,
+            text=roundup_text_model
+        )
+    )
+
+    # ==========================================================================
+    # 6. Save Manifest JSON
+    # ==========================================================================
     manifest = VisualAssetManifest(
         episode_number=ep_num,
         edition_date=edition_date,

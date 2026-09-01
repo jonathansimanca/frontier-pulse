@@ -163,8 +163,15 @@ def test_ranked_news_item_validation():
 
 
 def test_visual_asset_manifest_validation():
-    """Test that VisualAssetManifest validates correctly with cover and insight cards."""
-    from src.schemas import VisualAssetManifest, VisualAssetItem, CoverCardText, InsightCardText
+    """Test that VisualAssetManifest validates correctly with exactly 4 assets."""
+    from src.schemas import (
+        VisualAssetManifest,
+        VisualAssetItem,
+        CoverCardText,
+        InsightCardText,
+        EditionContextCardText,
+        RoundupCardText,
+    )
 
     manifest_data = {
         "episode_number": 4,
@@ -177,8 +184,8 @@ def test_visual_asset_manifest_validation():
                 "suggested_screen_time_seconds": 3,
                 "text": {
                     "series": "FRONTIER PULSE",
-                    "format": "PODCAST SEMANAL DE NOTICIAS DE IA",
-                    "headline": "3 avances de IA que debes entender esta semana",
+                    "format": "PODCAST SEMANAL DE IA",
+                    "headline": "3 avances de IA clave esta semana",
                     "metadata": "Episodio 4 · 4 min",
                     "cta": "▶ Escuchar ahora"
                 }
@@ -196,20 +203,60 @@ def test_visual_asset_manifest_validation():
                     "footer": "FRONTIER PULSE · EPISODIO 4"
                 },
                 "source_reference": "https://openai.com/news"
+            },
+            {
+                "file": "episode-4-03-insight-model-efficiency.png",
+                "type": "news_insight",
+                "display_order": 3,
+                "suggested_screen_time_seconds": 5,
+                "text": {
+                    "label": "ESTA SEMANA EN IA",
+                    "title": "Modelos compactos superan benchmarks de razonamiento",
+                    "key_fact": "Nuevas arquitecturas reducen 40% el costo de inferencia.",
+                    "why_it_matters": "POR QUÉ IMPORTA: Democratiza el despliegue local de IA.",
+                    "footer": "FRONTIER PULSE · EPISODIO 4"
+                },
+                "source_reference": "https://anthropic.com"
+            },
+            {
+                "file": "episode-4-04-news-roundup.png",
+                "type": "news_roundup",
+                "display_order": 4,
+                "suggested_screen_time_seconds": 8,
+                "text": {
+                    "label": "RADAR DE CIERRE",
+                    "headline": "Más señales que debes tener en el radar",
+                    "remaining_titles": [
+                        "Avance en chips neuronales",
+                        "Nuevas regulaciones europeas",
+                        "Alianza de robótica abierta"
+                    ],
+                    "cta": "Escucha el episodio completo",
+                    "footer": "FRONTIER PULSE · EPISODIO 4"
+                }
             }
         ]
     }
 
     manifest = VisualAssetManifest.model_validate(manifest_data)
     assert manifest.episode_number == 4
-    assert len(manifest.assets) == 2
+    assert len(manifest.assets) == 4
     assert manifest.assets[0].type == "cover"
     assert manifest.assets[1].type == "news_insight"
-    assert manifest.assets[1].source_reference == "https://openai.com/news"
+    assert manifest.assets[2].type == "news_insight"
+    assert manifest.assets[3].type == "news_roundup"
+    assert len(manifest.assets[3].text.remaining_titles) == 3
 
-    # Test that fewer than 2 assets or more than 3 assets triggers validation error
+    # Test that fewer than 4 assets triggers validation error
     too_few_data = manifest_data.copy()
-    too_few_data["assets"] = [manifest_data["assets"][0]]
+    too_few_data["assets"] = manifest_data["assets"][:3]
     with pytest.raises(ValidationError):
         VisualAssetManifest.model_validate(too_few_data)
+
+    # Test that more than 4 assets triggers validation error
+    too_many_data = manifest_data.copy()
+    too_many_data["assets"] = manifest_data["assets"] + [manifest_data["assets"][0]]
+    with pytest.raises(ValidationError):
+        VisualAssetManifest.model_validate(too_many_data)
+
 

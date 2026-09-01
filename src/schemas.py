@@ -144,31 +144,47 @@ class EditorialQualityReport(BaseModel):
 
 class CoverCardText(BaseModel):
     series: str = Field(default="FRONTIER PULSE", description="Top series label")
-    format: str = Field(default="WEEKLY AI NEWS PODCAST", description="Supporting format label")
-    headline: str = Field(description="Benefit-led main headline (max 10 words)")
-    metadata: str = Field(description="Metadata line, e.g., 'Episode 4 · 4 min'")
-    cta: str = Field(default="▶ Listen now", description="Call to action line")
+    format: str = Field(default="PODCAST SEMANAL DE IA", description="Supporting format label")
+    headline: str = Field(description="Benefit-led main headline (max 8 words)")
+    metadata: str = Field(description="Metadata line, e.g., 'Episodio 4 · 4 min'")
+    cta: str = Field(default="Escuchar ahora", description="Call to action line")
 
 
 class InsightCardText(BaseModel):
-    label: str = Field(default="THIS WEEK IN AI", description="Top topic label")
-    title: str = Field(description="Plain-language headline for the story (max 9 words)")
+    label: str = Field(default="ESTA SEMANA EN IA", description="Top topic label")
+    title: str = Field(description="Plain-language headline for the story (max 8 words)")
     key_fact: str = Field(description="One verifiable sentence describing what happened (max 20 words)")
-    why_it_matters: str = Field(description="Short practical implication (max 16 words)")
-    footer: str = Field(description="Footer line, e.g., 'FRONTIER PULSE · EPISODE 4'")
+    why_it_matters: str = Field(description="Short practical implication starting with POR QUÉ IMPORTA: (max 16 words)")
+    footer: str = Field(description="Footer line, e.g., 'FRONTIER PULSE · EPISODIO 4'")
+
+
+class EditionContextCardText(BaseModel):
+    label: str = Field(default="CONTEXTO DE LA EDICIÓN", description="Top label")
+    title: str = Field(description="Context headline (max 8 words)")
+    context_text: str = Field(description="Context or listening guidance (max 25 words)")
+    cta: str = Field(default="Escucha el episodio completo", description="Call to action line")
+    footer: str = Field(description="Footer line, e.g., 'FRONTIER PULSE · EPISODIO 4'")
+
+
+class RoundupCardText(BaseModel):
+    label: str = Field(default="", description="Deprecated legacy field; no longer rendered")
+    headline: str = Field(default="También esta semana", description="Concise heading for the remaining-news list")
+    remaining_titles: List[str] = Field(default_factory=list, max_length=3, description="Up to 3 remaining story titles (<= 7 words each)")
+    cta: str = Field(default="Escucha el episodio completo", description="Closing call to action")
+    footer: str = Field(description="Footer line, e.g., 'FRONTIER PULSE · EPISODIO 4'")
 
 
 class VisualAssetItem(BaseModel):
     file: str = Field(description="Filename of the generated PNG asset (e.g. episode-4-01-cover.png)")
-    type: str = Field(description="Type of asset: 'cover' or 'news_insight'")
-    display_order: int = Field(description="1-based suggested display order")
+    type: str = Field(description="Type of asset: 'cover', 'news_insight', 'edition_context', or 'news_roundup'")
+    display_order: int = Field(description="1-based suggested display order (1 to 4)")
     suggested_screen_time_seconds: int = Field(default=3, description="Recommended display duration in seconds")
-    text: Union[CoverCardText, InsightCardText, dict] = Field(description="Structured text layout data")
+    text: Union[CoverCardText, InsightCardText, EditionContextCardText, RoundupCardText, dict] = Field(description="Structured text layout data")
     source_reference: Optional[str] = Field(None, description="URL or source reference for news insight cards")
 
 
 class VisualAssetManifest(BaseModel):
     episode_number: int = Field(description="Sequential episode number")
     edition_date: Optional[str] = Field(None, description="Target edition date in YYYY-MM-DD format")
-    assets: List[VisualAssetItem] = Field(min_length=2, max_length=3, description="List of 2 to 3 visual assets")
+    assets: List[VisualAssetItem] = Field(min_length=4, max_length=4, description="List of exactly 4 visual assets")
 
