@@ -43,7 +43,7 @@ def map_category_to_scene_mode(category: Optional[str]) -> str:
     cat = category.lower()
     if any(k in cat for k in ["agent", "autonomous", "automation", "workflow", "multi-agent"]):
         return "orchestrator"
-    elif any(k in cat for k in ["security", "governance", "regulation", "breach", "policy", "safety", "risk"]):
+    elif any(k in cat for k in ["security", "governance", "regulation", "breach", "policy", "safety", "risk", "cyber"]):
         return "alert"
     elif any(k in cat for k in ["hardware", "infrastructure", "chip", "compute", "robotics", "open source", "launch", "tool"]):
         return "builder"
@@ -58,23 +58,31 @@ def build_fallback_plan(news_data: dict, episode_number: int, language: str = "e
     if not items:
         raise ValueError("Cannot formulate visual plan from empty news items.")
 
+    is_spanish = "es" in language.lower()
     primary_item = items[0]
     secondary_item = items[1] if len(items) > 1 else None
     remaining_items = items[2:] if len(items) > 2 else []
 
+    why_prefix = "POR QUÉ IMPORTA:" if is_spanish else "WHY IT MATTERS:"
+
     # 1. Cover Card
     cover_headline = clamp_words(
-        f"3 avances de IA clave esta semana" if language == "es" else "3 key AI developments this week",
+        "3 avances de IA clave esta semana" if is_spanish else "3 key AI developments this week",
         MAX_WORDS_COVER_HEADLINE
     )
     cover_mode = map_category_to_scene_mode(primary_item.get("category"))
-    cover_subject = f"Pulse exploring developments in {primary_item.get('category', 'Artificial Intelligence')}"
+    cover_subject = f"Key developments in {primary_item.get('category', 'Artificial Intelligence')}"
 
     # 2. Story A
-    title_a = clamp_words(primary_item.get("title", "Avance relevante en IA"), MAX_WORDS_INSIGHT_HEADLINE)
-    fact_a = clamp_words(primary_item.get("summary", "Desarrollo verificado en inteligencia artificial."), MAX_WORDS_KEY_FACT)
-    why_raw_a = primary_item.get("why_it_matters", "Relevancia directa para la arquitectura tecnológica.")
-    why_prefix = "POR QUÉ IMPORTA:" if language == "es" else "WHY IT MATTERS:"
+    title_a = clamp_words(
+        primary_item.get("title", "Avance relevante en IA" if is_spanish else "Key AI Breakthrough"),
+        MAX_WORDS_INSIGHT_HEADLINE
+    )
+    fact_a = clamp_words(
+        primary_item.get("summary", "Desarrollo verificado en inteligencia artificial." if is_spanish else "Verified AI breakthrough."),
+        MAX_WORDS_KEY_FACT
+    )
+    why_raw_a = primary_item.get("why_it_matters", "Relevancia directa para la arquitectura tecnológica." if is_spanish else "Direct relevance to technical architecture.")
     if not why_raw_a.startswith(why_prefix):
         why_raw_a = f"{why_prefix} {why_raw_a}"
     why_a = clamp_words(why_raw_a, MAX_WORDS_WHY_IT_MATTERS)
@@ -88,9 +96,15 @@ def build_fallback_plan(news_data: dict, episode_number: int, language: str = "e
 
     # 3. Story B / Fallback Context
     if secondary_item:
-        title_b = clamp_words(secondary_item.get("title", "Innovación destacada en IA"), MAX_WORDS_INSIGHT_HEADLINE)
-        fact_b = clamp_words(secondary_item.get("summary", "Avance técnico verificado."), MAX_WORDS_KEY_FACT)
-        why_raw_b = secondary_item.get("why_it_matters", "Impacto en productividad y desarrollo.")
+        title_b = clamp_words(
+            secondary_item.get("title", "Innovación destacada en IA" if is_spanish else "Featured AI Innovation"),
+            MAX_WORDS_INSIGHT_HEADLINE
+        )
+        fact_b = clamp_words(
+            secondary_item.get("summary", "Avance técnico verificado." if is_spanish else "Verified technical development."),
+            MAX_WORDS_KEY_FACT
+        )
+        why_raw_b = secondary_item.get("why_it_matters", "Impacto en productividad y desarrollo." if is_spanish else "Impact on productivity and engineering.")
         if not why_raw_b.startswith(why_prefix):
             why_raw_b = f"{why_prefix} {why_raw_b}"
         why_b = clamp_words(why_raw_b, MAX_WORDS_WHY_IT_MATTERS)
@@ -112,13 +126,13 @@ def build_fallback_plan(news_data: dict, episode_number: int, language: str = "e
     else:
         # Limited-data fallback (Section 8.4)
         story_b_data = {
-            "slug": "contexto-edicion",
-            "title": "Contexto y perspectiva de la semana",
-            "key_fact": "Análisis consolidado sobre la evolución y tendencias de frontera en IA.",
-            "why_it_matters": f"{why_prefix} Permite anticipar patrones tecnológicos clave.",
+            "slug": "contexto-edicion" if is_spanish else "edition-context",
+            "title": "Contexto y perspectiva de la semana" if is_spanish else "Weekly Context & Strategic Overview",
+            "key_fact": "Análisis consolidado sobre la evolución y tendencias de frontera en IA." if is_spanish else "Consolidated analysis on frontier AI trends and strategic developments.",
+            "why_it_matters": f"{why_prefix} " + ("Permite anticipar patrones tecnológicos clave." if is_spanish else "Enables teams to anticipate key architectural shifts."),
             "source_reference": "Frontier Pulse",
             "scene_mode": "analyst",
-            "scene_subject": "Pulse reviewing high-level technology intelligence landscape",
+            "scene_subject": "High-level technology intelligence landscape",
             "is_fallback_context": True
         }
 
@@ -130,7 +144,7 @@ def build_fallback_plan(news_data: dict, episode_number: int, language: str = "e
             remaining_titles.append(clamp_words(raw_title, MAX_WORDS_ROUNDUP_TITLE))
 
     if not remaining_titles:
-        if language == "es":
+        if is_spanish:
             remaining_titles = [
                 "Análisis a fondo y contexto estratégico",
                 "Señales clave para ingeniería y producto",
@@ -156,12 +170,12 @@ def build_fallback_plan(news_data: dict, episode_number: int, language: str = "e
             "why_it_matters": why_a,
             "source_reference": source_a,
             "scene_mode": mode_a,
-            "scene_subject": f"Pulse analyzing {primary_item.get('category', 'AI breakthrough')}"
+            "scene_subject": f"Symbolic scene representing {primary_item.get('category', 'AI breakthrough')}"
         },
         "story_b": story_b_data,
         "roundup": {
             "remaining_titles": remaining_titles[:3],
-            "scene_subject": "Pulse narrating the remaining weekly signals at a microphone"
+            "scene_subject": "Broadcast studio ambiance representing weekly intelligence signals"
         }
     }
 
@@ -179,15 +193,23 @@ def plan_editorial_cards(
     if not items:
         raise ValueError("Cannot plan visual cards from empty news items.")
 
+    is_spanish = "es" in language.lower()
     fallback = build_fallback_plan(news_data, episode_number, language)
+    why_prefix = "POR QUÉ IMPORTA:" if is_spanish else "WHY IT MATTERS:"
 
     try:
         client = get_genai_client()
+        lang_instruction = (
+            "ALL user-facing text MUST be in Latin American Spanish."
+            if is_spanish
+            else "ALL user-facing text MUST be in professional English."
+        )
+
         prompt = f"""You are the Lead Visual Designer and Editor for Frontier Pulse, a premier AI technology watch podcast.
 Formulate structured copy and narrative modes for exactly 4 mobile video visual cards (1080x1350 px, 4:5 aspect ratio) based on this week's news.
 
 Edition Title: {news_data.get('title', '')}
-Language: Latin American Spanish ({language})
+Target Language: {'Spanish' if is_spanish else 'English'}
 Items:
 {json.dumps([{
     'id': it.get('id'),
@@ -199,24 +221,24 @@ Items:
 } for it in items[:5]], indent=2, ensure_ascii=False)}
 
 CONSTRAINTS & RULES:
-1. ALL user-facing text MUST be in Latin American Spanish.
+1. {lang_instruction}
 2. Cover Card (AR-01):
    - headline: EXACTLY 1 benefit-led headline. MAXIMUM 8 WORDS.
    - scene_mode: one of ["analyst", "alert", "orchestrator", "builder", "neutral"]
-   - scene_subject: concise situation for background illustration (NO text).
+   - scene_subject: concise situation for background illustration (NO text, NO character names).
 3. Story A (AR-02, Primary News Item):
    - slug: 2-3 word lowercase hyphenated topic slug.
    - title: Plain-language headline. MAXIMUM 8 WORDS.
    - key_fact: 1 verifiable factual sentence describing what happened. MAXIMUM 20 WORDS.
-   - why_it_matters: Short practical implication starting with "POR QUÉ IMPORTA: ". MAXIMUM 16 WORDS (including prefix).
+   - why_it_matters: Short practical implication starting with "{why_prefix} ". MAXIMUM 16 WORDS (including prefix).
    - source_reference: string url or publisher.
    - scene_mode: one of ["analyst", "alert", "orchestrator", "builder"]
-   - scene_subject: concise visual situation.
+   - scene_subject: concise visual situation without character names.
 4. Story B (AR-03, Secondary News Item):
-   - slug, title (max 8 words), key_fact (max 20 words), why_it_matters (max 16 words, starting with "POR QUÉ IMPORTA: "), source_reference, scene_mode, scene_subject.
+   - slug, title (max 8 words), key_fact (max 20 words), why_it_matters (max 16 words, starting with "{why_prefix} "), source_reference, scene_mode, scene_subject.
 5. Roundup (AR-04, Closing Radar):
    - remaining_titles: array of up to 3 remaining story titles, each MAXIMUM 7 WORDS.
-   - scene_subject: "Pulse narrating the remaining weekly signals at a microphone"
+   - scene_subject: "Broadcast studio ambiance representing weekly intelligence signals"
 
 Respond strictly with valid JSON conforming to this schema:
 {{
@@ -229,7 +251,7 @@ Respond strictly with valid JSON conforming to this schema:
     "slug": "string",
     "title": "string (<= 8 words)",
     "key_fact": "string (<= 20 words)",
-    "why_it_matters": "string (<= 16 words, starts with 'POR QUÉ IMPORTA: ')",
+    "why_it_matters": "string (<= 16 words, starts with '{why_prefix} ')",
     "source_reference": "string",
     "scene_mode": "analyst | alert | orchestrator | builder",
     "scene_subject": "string"
@@ -238,7 +260,7 @@ Respond strictly with valid JSON conforming to this schema:
     "slug": "string",
     "title": "string (<= 8 words)",
     "key_fact": "string (<= 20 words)",
-    "why_it_matters": "string (<= 16 words, starts with 'POR QUÉ IMPORTA: ')",
+    "why_it_matters": "string (<= 16 words, starts with '{why_prefix} ')",
     "source_reference": "string",
     "scene_mode": "analyst | alert | orchestrator | builder",
     "scene_subject": "string"
@@ -277,8 +299,8 @@ Respond strictly with valid JSON conforming to this schema:
                 fallback["story_a"]["key_fact"] = clamp_words(sa["key_fact"], MAX_WORDS_KEY_FACT)
             if sa.get("why_it_matters"):
                 why_val = sa["why_it_matters"].strip()
-                if not why_val.startswith("POR QUÉ IMPORTA:"):
-                    why_val = f"POR QUÉ IMPORTA: {why_val}"
+                if not (why_val.startswith("POR QUÉ IMPORTA:") or why_val.startswith("WHY IT MATTERS:")):
+                    why_val = f"{why_prefix} {why_val}"
                 fallback["story_a"]["why_it_matters"] = clamp_words(why_val, MAX_WORDS_WHY_IT_MATTERS)
             if sa.get("slug"):
                 fallback["story_a"]["slug"] = slugify(sa["slug"])
@@ -297,8 +319,8 @@ Respond strictly with valid JSON conforming to this schema:
                 fallback["story_b"]["key_fact"] = clamp_words(sb["key_fact"], MAX_WORDS_KEY_FACT)
             if sb.get("why_it_matters"):
                 why_val = sb["why_it_matters"].strip()
-                if not why_val.startswith("POR QUÉ IMPORTA:"):
-                    why_val = f"POR QUÉ IMPORTA: {why_val}"
+                if not (why_val.startswith("POR QUÉ IMPORTA:") or why_val.startswith("WHY IT MATTERS:")):
+                    why_val = f"{why_prefix} {why_val}"
                 fallback["story_b"]["why_it_matters"] = clamp_words(why_val, MAX_WORDS_WHY_IT_MATTERS)
             if sb.get("slug"):
                 fallback["story_b"]["slug"] = slugify(sb["slug"])

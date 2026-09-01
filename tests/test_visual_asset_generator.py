@@ -83,8 +83,8 @@ def test_render_cover_card_with_background():
     assert img.mode == "RGB"
 
 
-def test_render_insight_card_dimensions_and_mode():
-    """Verify AR-02/AR-03 News Insight Card renders to 1080x1350 RGB image."""
+def test_render_insight_card_dimensions_and_mode_spanish():
+    """Verify AR-02/AR-03 News Insight Card renders on controlled reading surface in Spanish."""
     insight_data = InsightCardText(
         label="ESTA SEMANA EN IA",
         title="Los agentes empresariales se vuelven más autónomos",
@@ -94,6 +94,21 @@ def test_render_insight_card_dimensions_and_mode():
     )
 
     img = render_insight_card(insight_data, scene_mode="orchestrator")
+    assert img.size == (1080, 1350)
+    assert img.mode == "RGB"
+
+
+def test_render_insight_card_english():
+    """Verify AR-02/AR-03 News Insight Card renders with English prefix WHY IT MATTERS:."""
+    insight_data = InsightCardText(
+        label="THIS WEEK IN AI",
+        title="Autonomous agents deployed at scale in enterprise",
+        key_fact="Anthropic rolled out major enhancements to Claude Developer Platform.",
+        why_it_matters="WHY IT MATTERS: Pushes the frontier of agentic AI engineering workflows.",
+        footer="FRONTIER PULSE · EPISODE 4"
+    )
+
+    img = render_insight_card(insight_data, scene_mode="builder")
     assert img.size == (1080, 1350)
     assert img.mode == "RGB"
 

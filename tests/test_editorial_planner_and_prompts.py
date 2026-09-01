@@ -1,4 +1,4 @@
-"""Unit tests for Editorial Planner, Scene Prompt Builder, and Tactile Textures."""
+"""Unit tests for Editorial Planner, Scene Prompt Builder, Tactile Textures, and Language Consistency."""
 
 import pytest
 from PIL import Image, ImageDraw
@@ -12,8 +12,8 @@ from src.editorial_planner import (
 from src.scene_prompt_builder import (
     build_scene_prompt,
     SAFE_ZONE_DIRECTIVES,
-    MODE_DESCRIPTIONS,
     NEGATIVE_PROMPT_DIRECTIVE,
+    MODE_COMPOSITION_DIRECTIVES,
 )
 from src.tactile_texture import (
     apply_paper_grain,
@@ -52,8 +52,8 @@ def test_map_category_to_scene_mode():
     assert map_category_to_scene_mode("Reasoning Models") == "analyst"
 
 
-def test_build_fallback_plan_with_multiple_items():
-    """Verify 4-card fallback plan with multiple news items."""
+def test_build_fallback_plan_with_multiple_items_spanish():
+    """Verify 4-card fallback plan in Spanish with multiple news items."""
     sample_news = {
         "title": "Frontier Pulse - Edición 2026-08-24",
         "items": [
@@ -87,6 +87,7 @@ def test_build_fallback_plan_with_multiple_items():
     assert "cover" in plan
     assert len(plan["cover"]["headline"].split()) <= MAX_WORDS_COVER_HEADLINE
     assert plan["cover"]["scene_mode"] in ["analyst", "alert", "orchestrator", "builder", "neutral"]
+    assert "Pulse" not in plan["cover"]["scene_subject"]
 
     assert "story_a" in plan
     assert len(plan["story_a"]["title"].split()) <= MAX_WORDS_INSIGHT_HEADLINE
@@ -94,47 +95,77 @@ def test_build_fallback_plan_with_multiple_items():
     assert len(plan["story_a"]["why_it_matters"].split()) <= MAX_WORDS_WHY_IT_MATTERS
     assert plan["story_a"]["why_it_matters"].startswith("POR QUÉ IMPORTA:")
     assert plan["story_a"]["slug"] == "item-1"
+    assert "Pulse" not in plan["story_a"]["scene_subject"]
 
     assert "story_b" in plan
     assert plan["story_b"]["is_fallback_context"] is False
     assert plan["story_b"]["scene_mode"] == "orchestrator"
+    assert "Pulse" not in plan["story_b"]["scene_subject"]
 
     assert "roundup" in plan
     assert len(plan["roundup"]["remaining_titles"]) >= 1
     assert len(plan["roundup"]["remaining_titles"][0].split()) <= MAX_WORDS_ROUNDUP_TITLE
+    assert "Pulse" not in plan["roundup"]["scene_subject"]
 
 
-def test_build_fallback_plan_with_single_item():
-    """Verify limited-data fallback when only 1 news item exists (Section 8.4)."""
+def test_build_fallback_plan_english():
+    """Verify 4-card fallback plan in English uses WHY IT MATTERS: and English defaults."""
     sample_news = {
-        "title": "Frontier Pulse - Edición 2026-08-24",
+        "title": "Frontier Pulse - Edition 2026-08-24",
         "items": [
             {
-                "id": "only-item",
-                "title": "Avance solitario de la semana",
+                "id": "item-1",
+                "title": "OpenAI announces new Astra model",
                 "category": "Reasoning Models",
-                "summary": "Desarrollo importante.",
-                "why_it_matters": "Relevancia directa."
+                "summary": "Solves complex math and coding benchmarks.",
+                "why_it_matters": "Accelerates technical capability.",
+                "sources": [{"url": "https://openai.com"}]
             }
         ]
     }
 
-    plan = build_fallback_plan(sample_news, episode_number=4, language="es")
+    plan = build_fallback_plan(sample_news, episode_number=4, language="en")
+    assert plan["story_a"]["why_it_matters"].startswith("WHY IT MATTERS:")
     assert plan["story_b"]["is_fallback_context"] is True
-    assert plan["story_b"]["slug"] == "contexto-edicion"
-    assert len(plan["roundup"]["remaining_titles"]) == 3
+    assert plan["story_b"]["why_it_matters"].startswith("WHY IT MATTERS:")
+    assert plan["story_b"]["slug"] == "edition-context"
 
 
-def test_scene_prompt_builder_directives():
-    """Verify scene prompt builder includes required negative directives and text safe zones."""
-    prompt_cover = build_scene_prompt("cover", "analyst", "Deep reasoning architecture")
-    assert "ABSOLUTELY NO readable text" in prompt_cover
-    assert "Aspect ratio 4:5 vertical portrait" in prompt_cover
-    assert "bottom 45%" in prompt_cover
+def test_scene_prompt_builder_no_pulse_character_in_positive_prompt():
+    """Verify that NO scene prompt contains the word 'Pulse' in the positive prompt,
+    and all prompts contain text-safe zones and character exclusions."""
+    modes = ["analyst", "alert", "orchestrator", "builder", "narrator", "neutral"]
+    asset_types = ["cover", "insight", "roundup"]
 
-    prompt_roundup = build_scene_prompt("roundup", "narrator")
-    assert "left 60%" in prompt_roundup
-    assert "microphone" in prompt_roundup
+    for a_type in asset_types:
+        for mode in modes:
+            prompt = build_scene_prompt(
+                asset_type=a_type,
+                scene_mode=mode,
+                scene_subject="Pulse exploring distributed reasoning systems"
+            )
+
+            # 1. Negative exclusion checks
+            assert "NO people" in prompt
+            assert "NO human figures" in prompt
+            assert "NO robots" in prompt
+            assert "NO faces" in prompt
+            assert "NO characters" in prompt
+            assert "ABSOLUTELY NO readable text" in prompt
+
+            # 2. Composition / Safe-zone checks
+            assert "separately composited editorial character" in prompt
+            assert "Aspect ratio 4:5 vertical portrait" in prompt
+            if a_type == "cover":
+                assert "bottom 45%" in prompt
+            elif a_type == "insight":
+                assert "bottom 55%" in prompt
+            elif a_type == "roundup":
+                assert "left 60%" in prompt
+
+            # 3. Positive prompt must NOT include the word "Pulse"
+            positive_part = prompt.split("ABSOLUTELY NO")[0]
+            assert "Pulse" not in positive_part, f"Found 'Pulse' in positive prompt: {positive_part}"
 
 
 def test_tactile_texture_primitives():
@@ -142,16 +173,10 @@ def test_tactile_texture_primitives():
     img = Image.new("RGBA", (1080, 1350), (27, 23, 21, 255))
     draw = ImageDraw.Draw(img)
 
-    # Draw brush stroke
     draw_terracotta_brush_stroke(draw, (100, 100), (400, 110), stroke_width=12)
-
-    # Draw marker underline
     draw_apricot_marker_underline(draw, (100, 200, 300, 240))
-
-    # Draw sage emphasis mark
     draw_sage_emphasis_mark(draw, (500, 300), radius=25, mark_type="circle")
 
-    # Apply paper grain
     grained_img = apply_paper_grain(img, intensity=0.04)
     assert grained_img.size == (1080, 1350)
     assert grained_img.mode == "RGBA"

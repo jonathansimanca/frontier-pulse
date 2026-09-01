@@ -8,7 +8,11 @@ from src.quality_gate import validate_edition_quality
 from src.script_generator import generate_podcast_script
 from src.audio_generator import load_spanish_script, synthesize_speech
 from src.image_generator import generate_podcast_cover
-from src.visual_asset_generator import generate_visual_assets
+from src.visual_asset_generator import (
+    generate_visual_assets,
+    validate_four_card_asset_set,
+    get_episode_number,
+)
 from src.telegram_publisher import publish_to_telegram
 
 from src.config import (
@@ -143,15 +147,23 @@ def run_pipeline():
 
         # Step 3.5: Generate Visual Assets (1080x1350 mobile video cards + manifest)
         print("\n--- STEP 3.5: Generating Visual Assets for Video & Cover ---")
-        cover_file_str = manifest.artifacts.get("cover_image")
         assets_manifest_str = manifest.artifacts.get("visual_assets_manifest")
-        has_cover = cover_file_str and Path(cover_file_str).exists()
-        has_assets_manifest = assets_manifest_str and Path(assets_manifest_str).exists()
+        edition_dir = get_edition_dir(edition_date)
+        ep_num = get_episode_number(edition_date)
 
-        if has_cover and has_assets_manifest and manifest.last_successful_stage not in [None, "created", "researched", "scripted", "audio_ready"]:
-            print(f"[+] Resuming: Visual assets already generated: {cover_file_str}")
-            cover_path = Path(cover_file_str)
+        is_valid_asset_set, validation_reason = validate_four_card_asset_set(
+            assets_manifest_str,
+            edition_dir,
+            ep_num
+        )
+
+        if is_valid_asset_set and manifest.last_successful_stage not in [None, "created", "researched", "scripted", "audio_ready"]:
+            print(f"[+] Resuming: Visual asset set is fully valid ({validation_reason}): {assets_manifest_str}")
+            cover_file_str = manifest.artifacts.get("cover_image")
+            cover_path = Path(cover_file_str) if cover_file_str else edition_dir / f"episode-{ep_num}-01-cover.png"
         else:
+            if assets_manifest_str:
+                print(f"[*] Visual asset set invalid/incomplete ({validation_reason}). Triggering full regeneration...")
             try:
                 # Approximate duration in minutes based on audio file size if present
                 audio_dur = 4
@@ -164,6 +176,7 @@ def run_pipeline():
                 v_manifest, file_paths = generate_visual_assets(
                     news_data=news_data,
                     edition_date=edition_date,
+                    episode_number=ep_num,
                     audio_duration_minutes=audio_dur
                 )
                 cover_path = file_paths.get("cover")

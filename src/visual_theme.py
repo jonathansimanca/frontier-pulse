@@ -1,10 +1,10 @@
 """Editorial Earth Tactile Visual Theme for Frontier Pulse.
 
 Centralizes palette tokens, typography rules, canvas geometry,
-contrast ratio validation, and cross-platform font resolution.
+role-based contrast ratio validation, and cross-platform font resolution.
 """
 
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -47,16 +47,16 @@ COLOR_CARD_BORDER_SAGE = (113, 138, 120, 140)
 
 
 # ==============================================================================
-# Typography Scales & Content Limits
+# Typography Scales & Content Limits (Approved Minimum Sizes)
 # ==============================================================================
-FONT_SIZE_COVER_HEADLINE = 76
-FONT_SIZE_INSIGHT_HEADLINE = 64
-FONT_SIZE_ROUNDUP_HEADLINE = 54
-FONT_SIZE_BODY = 30
-FONT_SIZE_CTA = 30
-FONT_SIZE_META = 28
-FONT_SIZE_LABEL = 24
-FONT_SIZE_FOOTER = 22
+FONT_SIZE_COVER_HEADLINE = 76   # 76 px bold
+FONT_SIZE_INSIGHT_HEADLINE = 64 # 64 px bold
+FONT_SIZE_ROUNDUP_HEADLINE = 54 # 54 px bold
+FONT_SIZE_BODY = 30             # 30 px regular/bold reading text
+FONT_SIZE_CTA = 30              # 30 px bold
+FONT_SIZE_META = 28             # 28 px
+FONT_SIZE_LABEL = 24            # 24 px bold (format, badges, hecho clave)
+FONT_SIZE_FOOTER = 22           # 22 px bold
 
 HEADLINE_LINE_HEIGHT_RATIO = 1.10
 
@@ -89,6 +89,50 @@ def calculate_contrast_ratio(rgb1: Tuple[int, int, int], rgb2: Tuple[int, int, i
     brightest = max(lum1, lum2)
     darkest = min(lum1, lum2)
     return (brightest + 0.05) / (darkest + 0.05)
+
+
+def validate_contrast_by_role(
+    text_rgb: Tuple[int, int, int],
+    bg_rgb: Tuple[int, int, int],
+    role: str = "body",
+    font_size: int = 30,
+    is_bold: bool = False
+) -> Tuple[bool, float, Dict[str, Union[float, bool, str]]]:
+    """Enforce role-based contrast compliance.
+
+    Rules:
+    - "body" / "primary": requires minimum 4.5:1 (AA regular), target 7.0:1 (AAA).
+    - "large_bold" / "cta" / "label": requires minimum 3.0:1 (AA large, >=24px bold or >=32px).
+    - Returns (is_valid, contrast_ratio, details_dict).
+    """
+    ratio = calculate_contrast_ratio(text_rgb, bg_rgb)
+    is_large = font_size >= 32 or (font_size >= 24 and is_bold)
+
+    if role in ["body", "primary"]:
+        min_required = 4.5
+        is_valid = ratio >= min_required
+        meets_target = ratio >= 7.0
+    elif role in ["large_bold", "cta", "label"]:
+        min_required = 3.0 if is_large else 4.5
+        is_valid = ratio >= min_required
+        meets_target = ratio >= 4.5
+    else:
+        min_required = 4.5
+        is_valid = ratio >= min_required
+        meets_target = ratio >= 7.0
+
+    details = {
+        "role": role,
+        "font_size": font_size,
+        "is_bold": is_bold,
+        "is_large_text": is_large,
+        "contrast_ratio": round(ratio, 2),
+        "min_required": min_required,
+        "meets_target": meets_target,
+        "is_valid": is_valid
+    }
+
+    return is_valid, ratio, details
 
 
 def get_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
@@ -133,7 +177,6 @@ def get_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
         except Exception:
             continue
 
-    # Fallback to default FreeTypeFont
     try:
         return ImageFont.load_default(size=size)
     except Exception:

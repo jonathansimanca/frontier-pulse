@@ -57,6 +57,7 @@ from src.visual_theme import (
     HEADLINE_LINE_HEIGHT_RATIO,
     get_font,
     wrap_text,
+    validate_contrast_by_role,
 )
 from src.pulse_character import (
     composite_pulse_on_canvas,
@@ -150,8 +151,8 @@ def apply_dark_scrim(canvas: Image.Image, bottom_scrim_height: int = 700) -> Ima
     scrim_draw = ImageDraw.Draw(scrim)
 
     # Top scrim
-    for y in range(250):
-        alpha = int(200 * (1 - y / 250))
+    for y in range(300):
+        alpha = int(220 * (1 - y / 300))
         scrim_draw.line([(0, y), (CANVAS_WIDTH, y)], fill=(COLOR_BG_CHARCOAL[0], COLOR_BG_CHARCOAL[1], COLOR_BG_CHARCOAL[2], alpha))
 
     # Bottom scrim
@@ -176,8 +177,27 @@ def render_cover_card(
     else:
         canvas = create_base_gradient_background(scene_mode=scene_mode)
 
-    # Composite Pulse character in upper-right visual zone
-    canvas = composite_pulse_on_canvas(canvas, mode=scene_mode, target_height=420, position=(580, 180), opacity=0.95)
+    # Headline geometry calculation
+    headline_font = get_font(FONT_SIZE_COVER_HEADLINE, bold=True)
+    dummy_draw = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
+    wrapped_headline = wrap_text(cover_data.headline, headline_font, CONTENT_WIDTH - 60, dummy_draw)
+    line_height = int(FONT_SIZE_COVER_HEADLINE * HEADLINE_LINE_HEIGHT_RATIO)
+    headline_block_height = len(wrapped_headline) * line_height
+
+    card_y = CANVAS_HEIGHT - SAFE_MARGIN_Y - 430 - (headline_block_height - 150)
+    card_y = max(480, card_y)
+    card_height = headline_block_height + 270
+    card_box = (SAFE_MARGIN_X, card_y, CANVAS_WIDTH - SAFE_MARGIN_X, card_y + card_height)
+
+    # Composite Pulse character avoiding cover text container
+    canvas = composite_pulse_on_canvas(
+        canvas,
+        mode=scene_mode,
+        target_height=420,
+        position=(580, 160),
+        opacity=0.95,
+        forbidden_zones=[card_box]
+    )
 
     overlay = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
@@ -185,13 +205,13 @@ def render_cover_card(
     # 1. Top Series Badge & Format Subtitle
     top_y = SAFE_MARGIN_Y + 10
     font_series = get_font(FONT_SIZE_BODY, bold=True)
-    font_format = get_font(20, bold=False)
+    font_format = get_font(FONT_SIZE_LABEL, bold=False)  # >= 24 px
 
     # Series pill badge
     series_text = cover_data.series.upper()
     s_bbox = draw.textbbox((0, 0), series_text, font=font_series)
     s_w = (s_bbox[2] - s_bbox[0]) + 36
-    s_h = 44
+    s_h = 46
     draw_rounded_card(
         draw,
         (SAFE_MARGIN_X, top_y, SAFE_MARGIN_X + s_w, top_y + s_h),
@@ -201,23 +221,11 @@ def render_cover_card(
     )
     draw.text((SAFE_MARGIN_X + 18, top_y + 8), series_text, font=font_series, fill=COLOR_TEXT_IVORY)
 
-    # Format line beneath series badge
-    format_y = top_y + s_h + 10
+    # Format line beneath series badge (>= 24 px)
+    format_y = top_y + s_h + 12
     draw.text((SAFE_MARGIN_X, format_y), cover_data.format.upper(), font=font_format, fill=COLOR_TEXT_SAND)
 
     # 2. Main Headline Card Surface (Center-Bottom)
-    headline_font = get_font(FONT_SIZE_COVER_HEADLINE, bold=True)
-    wrapped_headline = wrap_text(cover_data.headline, headline_font, CONTENT_WIDTH - 60, draw)
-    
-    line_height = int(FONT_SIZE_COVER_HEADLINE * HEADLINE_LINE_HEIGHT_RATIO)
-    headline_block_height = len(wrapped_headline) * line_height
-
-    card_y = CANVAS_HEIGHT - SAFE_MARGIN_Y - 420 - (headline_block_height - 150)
-    card_y = max(480, card_y)
-    card_height = headline_block_height + 260
-    card_box = (SAFE_MARGIN_X, card_y, CANVAS_WIDTH - SAFE_MARGIN_X, card_y + card_height)
-
-    # Card Surface with high contrast ink background
     draw_rounded_card(draw, card_box, radius=24, fill=COLOR_CARD_SURFACE_OPAQUE, outline=COLOR_CARD_BORDER_TERRACOTTA, width=2)
 
     # Draw headline lines
@@ -226,7 +234,7 @@ def render_cover_card(
         draw.text((SAFE_MARGIN_X + 30, text_y), line, font=headline_font, fill=COLOR_TEXT_IVORY)
         text_y += line_height
 
-    # Tactile accent gesture (Rough Terracotta brush stroke beneath headline container)
+    # Tactile accent gesture
     draw_terracotta_brush_stroke(draw, (SAFE_MARGIN_X + 30, text_y + 8), (SAFE_MARGIN_X + 260, text_y + 12), stroke_width=8, opacity=200)
 
     # 3. Metadata Line (Episode & Duration)
@@ -234,7 +242,7 @@ def render_cover_card(
     font_meta = get_font(FONT_SIZE_META, bold=False)
     draw.text((SAFE_MARGIN_X + 30, meta_y), cover_data.metadata, font=font_meta, fill=COLOR_TEXT_SAND)
 
-    # 4. CTA Button (Ivory on Terracotta)
+    # 4. CTA Button (Ivory on Terracotta, 30 px bold)
     cta_y = meta_y + 48
     font_cta = get_font(FONT_SIZE_CTA, bold=True)
     cta_text = cover_data.cta.strip()
@@ -265,50 +273,76 @@ def render_insight_card(
     scene_mode: str = "analyst",
     accent_border: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA
 ) -> Image.Image:
-    """Deterministically render AR-02 / AR-03 News Insight Card (1080x1350 px)."""
+    """Deterministically render AR-02 / AR-03 News Insight Card on controlled reading surfaces."""
     if background_image is not None:
         canvas = background_image.resize((CANVAS_WIDTH, CANVAS_HEIGHT), Image.Resampling.LANCZOS).convert("RGBA")
-        canvas = apply_dark_scrim(canvas, bottom_scrim_height=800)
+        canvas = apply_dark_scrim(canvas, bottom_scrim_height=850)
     else:
         canvas = create_base_gradient_background(scene_mode=scene_mode)
 
-    # Composite Pulse character in upper right
-    canvas = composite_pulse_on_canvas(canvas, mode=scene_mode, target_height=380, position=(620, 160), opacity=0.90)
+    dummy_draw = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
+
+    # 1. Measure and build Top Headline Card (Left Column)
+    top_y = SAFE_MARGIN_Y + 10
+    font_badge = get_font(FONT_SIZE_LABEL, bold=True)
+    badge_label = insight_data.label.upper()
+    badge_bbox = dummy_draw.textbbox((0, 0), badge_label, font=font_badge)
+    badge_w = (badge_bbox[2] - badge_bbox[0]) + 32
+    badge_h = 42
+
+    font_title = get_font(FONT_SIZE_INSIGHT_HEADLINE, bold=True)
+    headline_max_width = 540  # Reserved width to leave right side clear for Pulse character
+    title_lines = wrap_text(insight_data.title, font_title, headline_max_width, dummy_draw)
+    title_lh = int(FONT_SIZE_INSIGHT_HEADLINE * HEADLINE_LINE_HEIGHT_RATIO)
+    title_block_h = len(title_lines) * title_lh
+
+    top_card_w = 580
+    top_card_h = badge_h + 20 + title_block_h + 24
+    top_card_box = (SAFE_MARGIN_X, top_y, SAFE_MARGIN_X + top_card_w, top_y + top_card_h)
+
+    # Composite Pulse character in upper right (position: 650, 140) avoiding top card
+    canvas = composite_pulse_on_canvas(
+        canvas,
+        mode=scene_mode,
+        target_height=370,
+        position=(650, 140),
+        opacity=0.92,
+        forbidden_zones=[top_card_box]
+    )
 
     overlay = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    # 1. Top Badge / Topic Label (Sage / Apricot accent)
-    top_y = SAFE_MARGIN_Y + 10
-    font_badge = get_font(FONT_SIZE_LABEL, bold=True)
-    badge_label = insight_data.label.upper()
-    badge_bbox = draw.textbbox((0, 0), badge_label, font=font_badge)
-    badge_w = (badge_bbox[2] - badge_bbox[0]) + 32
-    badge_h = 42
-
+    # Draw controlled Top Headline Reading Surface
     draw_rounded_card(
         draw,
-        (SAFE_MARGIN_X, top_y, SAFE_MARGIN_X + badge_w, top_y + badge_h),
+        top_card_box,
+        radius=20,
+        fill=COLOR_CARD_SURFACE_OPAQUE,
+        outline=COLOR_CARD_BORDER_SUBTLE,
+        width=1
+    )
+
+    # Top Badge inside headline card
+    draw_rounded_card(
+        draw,
+        (SAFE_MARGIN_X + 20, top_y + 16, SAFE_MARGIN_X + 20 + badge_w, top_y + 16 + badge_h),
         radius=12,
         fill=(COLOR_ACCENT_SAGE[0], COLOR_ACCENT_SAGE[1], COLOR_ACCENT_SAGE[2], 220),
         outline=None
     )
-    draw.text((SAFE_MARGIN_X + 16, top_y + 8), badge_label, font=font_badge, fill=COLOR_TEXT_IVORY)
+    draw.text((SAFE_MARGIN_X + 36, top_y + 24), badge_label, font=font_badge, fill=COLOR_TEXT_IVORY)
 
-    # 2. Headline / Title (64 px, bold Ivory text, max 8 words)
-    title_y = top_y + badge_h + 24
-    font_title = get_font(FONT_SIZE_INSIGHT_HEADLINE, bold=True)
-    title_lines = wrap_text(insight_data.title, font_title, CONTENT_WIDTH - 200, draw)
-    
-    title_lh = int(FONT_SIZE_INSIGHT_HEADLINE * HEADLINE_LINE_HEIGHT_RATIO)
+    # Title lines inside headline card
+    title_y = top_y + 16 + badge_h + 16
     for line in title_lines:
-        draw.text((SAFE_MARGIN_X, title_y), line, font=font_title, fill=COLOR_TEXT_IVORY)
+        draw.text((SAFE_MARGIN_X + 20, title_y), line, font=font_title, fill=COLOR_TEXT_IVORY)
         title_y += title_lh
 
-    # 3. Key Fact Container
-    fact_card_y = title_y + 30
-    font_fact_label = get_font(20, bold=True)
-    font_fact_text = get_font(FONT_SIZE_BODY, bold=False)
+    # 2. Key Fact Container (Spans full content width)
+    fact_card_y = max(top_y + top_card_h + 24, 530)
+    font_fact_label = get_font(FONT_SIZE_LABEL, bold=True)  # >= 24 px
+    font_fact_text = get_font(FONT_SIZE_BODY, bold=False)   # 30 px
 
     fact_lines = wrap_text(insight_data.key_fact, font_fact_text, CONTENT_WIDTH - 60, draw)
     fact_lh = 42
@@ -317,17 +351,18 @@ def render_insight_card(
 
     draw_rounded_card(draw, fact_box, radius=20, fill=COLOR_CARD_SURFACE_OPAQUE, outline=COLOR_CARD_BORDER_SUBTLE, width=1)
     
-    # Spanish label HECHO CLAVE (no bilingual text)
-    draw.text((SAFE_MARGIN_X + 30, fact_card_y + 20), "HECHO CLAVE", font=font_fact_label, fill=COLOR_TEXT_SAND)
+    # Section Label (24 px bold Sand)
+    fact_label_text = "HECHO CLAVE" if "es" in insight_data.footer.lower() or "episodio" in insight_data.footer.lower() else "KEY FACT"
+    draw.text((SAFE_MARGIN_X + 30, fact_card_y + 20), fact_label_text, font=font_fact_label, fill=COLOR_TEXT_SAND)
     fact_text_y = fact_card_y + 55
     for line in fact_lines:
         draw.text((SAFE_MARGIN_X + 30, fact_text_y), line, font=font_fact_text, fill=COLOR_TEXT_IVORY)
         fact_text_y += fact_lh
 
-    # 4. Why It Matters Container (Highlighted with Terracotta Accent Border)
+    # 3. Why It Matters Container (Highlighted with Terracotta/Apricot Accent Border)
     why_card_y = fact_card_y + fact_box_h + 22
-    font_why_text = get_font(FONT_SIZE_BODY, bold=False)
-    font_why_bold = get_font(FONT_SIZE_BODY, bold=True)
+    font_why_text = get_font(FONT_SIZE_BODY, bold=False)  # 30 px
+    font_why_bold = get_font(FONT_SIZE_BODY, bold=True)   # 30 px bold
 
     why_text = insight_data.why_it_matters.strip()
     why_lines = wrap_text(why_text, font_why_text, CONTENT_WIDTH - 60, draw)
@@ -346,17 +381,24 @@ def render_insight_card(
 
     why_text_y = why_card_y + 24
     for line_idx, line in enumerate(why_lines):
-        if line_idx == 0 and line.startswith("POR QUÉ IMPORTA:"):
-            prefix = "POR QUÉ IMPORTA:"
+        # Support both Spanish ("POR QUÉ IMPORTA:") and English ("WHY IT MATTERS:") prefixes
+        prefix = None
+        if line_idx == 0:
+            if line.startswith("POR QUÉ IMPORTA:"):
+                prefix = "POR QUÉ IMPORTA:"
+            elif line.startswith("WHY IT MATTERS:"):
+                prefix = "WHY IT MATTERS:"
+
+        if prefix:
             rest = line[len(prefix):].lstrip()
-            draw.text((SAFE_MARGIN_X + 30, why_text_y), prefix, font=font_why_bold, fill=COLOR_ACCENT_TERRACOTTA)
+            draw.text((SAFE_MARGIN_X + 30, why_text_y), prefix, font=font_why_bold, fill=COLOR_ACCENT_APRICOT)
             prefix_bbox = draw.textbbox((SAFE_MARGIN_X + 30, why_text_y), prefix, font=font_why_bold)
             draw.text((prefix_bbox[2] + 10, why_text_y), rest, font=font_why_text, fill=COLOR_TEXT_IVORY)
         else:
             draw.text((SAFE_MARGIN_X + 30, why_text_y), line, font=font_why_text, fill=COLOR_TEXT_IVORY)
         why_text_y += why_lh
 
-    # 5. Footer Line (Fixed at bottom safe margin)
+    # 4. Footer Line (Fixed at bottom safe margin)
     footer_y = CANVAS_HEIGHT - SAFE_MARGIN_Y - 30
     font_footer = get_font(FONT_SIZE_FOOTER, bold=True)
     draw.text((SAFE_MARGIN_X, footer_y), insight_data.footer.upper(), font=font_footer, fill=COLOR_TEXT_SAND)
@@ -394,8 +436,18 @@ def render_roundup_card(
     else:
         canvas = create_base_gradient_background(scene_mode="narrator")
 
+    left_column_width = 510
+    left_forbidden_box = (SAFE_MARGIN_X, SAFE_MARGIN_Y, SAFE_MARGIN_X + left_column_width, CANVAS_HEIGHT - SAFE_MARGIN_Y)
+
     # Composite Pulse in Narrator mode at microphone on the right side
-    canvas = composite_pulse_on_canvas(canvas, mode="narrator", target_height=480, position=(560, 320), opacity=0.98)
+    canvas = composite_pulse_on_canvas(
+        canvas,
+        mode="narrator",
+        target_height=480,
+        position=(570, 320),
+        opacity=0.98,
+        forbidden_zones=[left_forbidden_box]
+    )
 
     overlay = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
@@ -417,7 +469,7 @@ def render_roundup_card(
     )
     draw.text((SAFE_MARGIN_X + 16, top_y + 8), badge_label, font=font_badge, fill=COLOR_TEXT_IVORY)
 
-    # 2. Main Headline
+    # 2. Main Headline (54 px bold)
     title_y = top_y + badge_h + 24
     font_title = get_font(FONT_SIZE_ROUNDUP_HEADLINE, bold=True)
     title_lines = wrap_text(roundup_data.headline, font_title, CONTENT_WIDTH, draw)
@@ -426,36 +478,35 @@ def render_roundup_card(
         draw.text((SAFE_MARGIN_X, title_y), line, font=font_title, fill=COLOR_TEXT_IVORY)
         title_y += title_lh
 
-    # 3. Clean Left Column: Remaining News Items
-    items_start_y = title_y + 40
-    font_item = get_font(28, bold=False)
+    # 3. Clean Left Column: Remaining News Items (30 px body font size)
+    items_start_y = title_y + 35
+    font_item = get_font(FONT_SIZE_BODY, bold=False)  # >= 30 px
     font_num = get_font(22, bold=True)
-    left_column_width = 490
 
     current_item_y = items_start_y
     for idx, title in enumerate(roundup_data.remaining_titles, 1):
         item_lines = wrap_text(title, font_item, left_column_width - 80, draw)
-        box_h = max(70, len(item_lines) * 36 + 26)
+        box_h = max(75, len(item_lines) * 38 + 26)
         item_box = (SAFE_MARGIN_X, current_item_y, SAFE_MARGIN_X + left_column_width, current_item_y + box_h)
 
         # Draw mini row container
         draw_rounded_card(draw, item_box, radius=14, fill=COLOR_CARD_SURFACE_OPAQUE, outline=COLOR_CARD_BORDER_SUBTLE, width=1)
 
         # Number circle badge
-        num_circle_box = [SAFE_MARGIN_X + 16, current_item_y + 14, SAFE_MARGIN_X + 50, current_item_y + 48]
+        num_circle_box = [SAFE_MARGIN_X + 16, current_item_y + 16, SAFE_MARGIN_X + 50, current_item_y + 50]
         draw.ellipse(num_circle_box, fill=COLOR_ACCENT_TERRACOTTA)
-        draw.text((SAFE_MARGIN_X + 27, current_item_y + 18), str(idx), font=font_num, fill=COLOR_TEXT_IVORY)
+        draw.text((SAFE_MARGIN_X + 27, current_item_y + 20), str(idx), font=font_num, fill=COLOR_TEXT_IVORY)
 
         # Title text lines
-        line_y = current_item_y + 16
+        line_y = current_item_y + 18
         for l in item_lines:
             draw.text((SAFE_MARGIN_X + 66, line_y), l, font=font_item, fill=COLOR_TEXT_IVORY)
-            line_y += 36
+            line_y += 38
 
         current_item_y += box_h + 16
 
-    # 4. CTA Button (Escucha el episodio completo)
-    cta_y = max(current_item_y + 35, CANVAS_HEIGHT - SAFE_MARGIN_Y - 140)
+    # 4. CTA Button (30 px bold)
+    cta_y = max(current_item_y + 30, CANVAS_HEIGHT - SAFE_MARGIN_Y - 140)
     font_cta = get_font(FONT_SIZE_CTA, bold=True)
     cta_text = roundup_data.cta.strip()
     cta_bbox = draw.textbbox((0, 0), cta_text, font=font_cta)
@@ -527,6 +578,65 @@ def generate_background_artwork(prompt: str) -> Optional[Image.Image]:
         print(f"[visual_asset_generator] Image generation client error: {e}")
 
     return None
+
+
+def validate_four_card_asset_set(
+    manifest_path_str: Optional[str],
+    edition_dir: Path,
+    expected_episode_number: int
+) -> Tuple[bool, str]:
+    """Validate that a previously generated visual asset manifest and its 4 cards are fully complete and valid.
+
+    Checks:
+    - Manifest file exists and parses as VisualAssetManifest.
+    - Contains exactly four assets.
+    - Display orders are strictly [1, 2, 3, 4].
+    - Expected file patterns exist: cover, insight A, insight B/context, roundup.
+    - Each file is a valid 1080x1350 PNG image.
+    """
+    if not manifest_path_str:
+        return False, "No manifest path string provided."
+
+    manifest_path = Path(manifest_path_str)
+    if not manifest_path.exists():
+        return False, f"Manifest file does not exist: {manifest_path}"
+
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        manifest = VisualAssetManifest.model_validate(data)
+    except Exception as e:
+        return False, f"Manifest validation error: {e}"
+
+    if len(manifest.assets) != 4:
+        return False, f"Manifest contains {len(manifest.assets)} assets (expected exactly 4)."
+
+    orders = [a.display_order for a in manifest.assets]
+    if orders != [1, 2, 3, 4]:
+        return False, f"Asset display orders are {orders} (expected [1, 2, 3, 4])."
+
+    types = [a.type for a in manifest.assets]
+    if types[0] != "cover" or types[3] != "news_roundup":
+        return False, f"Unexpected asset types sequence: {types}"
+
+    if types[1] != "news_insight" or types[2] not in ["news_insight", "edition_context"]:
+        return False, f"Unexpected asset types sequence: {types}"
+
+    # Verify each image on disk
+    for item in manifest.assets:
+        img_path = edition_dir / item.file
+        if not img_path.exists():
+            return False, f"Asset file missing on disk: {img_path}"
+        try:
+            with Image.open(img_path) as img:
+                if img.format != "PNG":
+                    return False, f"Asset file {item.file} is not PNG format (found {img.format})."
+                if img.size != (CANVAS_WIDTH, CANVAS_HEIGHT):
+                    return False, f"Asset file {item.file} has invalid dimensions {img.size} (expected {(CANVAS_WIDTH, CANVAS_HEIGHT)})."
+        except Exception as e:
+            return False, f"Corrupted asset image {item.file}: {e}"
+
+    return True, "Valid 4-card asset set."
 
 
 def generate_visual_assets(
@@ -663,9 +773,9 @@ def generate_visual_assets(
             cta="▶ Escucha el episodio completo" if lang_code == "es" else "▶ Listen to the full episode",
             footer=footer_text
         )
-        insight_b_img = render_context_card(context_text_model, background_image=bg_b, scene_mode=story_b.get("scene_mode", "analyst"))
         card_b_filename = f"episode-{ep_num}-03-insight-{slug_b}.png"
         card_b_path = edition_dir / card_b_filename
+        insight_b_img = render_context_card(context_text_model, background_image=bg_b, scene_mode=story_b.get("scene_mode", "analyst"))
         insight_b_img.save(card_b_path, format="PNG")
         generated_file_paths["insight_b"] = card_b_path
 
@@ -687,14 +797,14 @@ def generate_visual_assets(
             why_it_matters=story_b["why_it_matters"],
             footer=footer_text
         )
+        card_b_filename = f"episode-{ep_num}-03-insight-{slug_b}.png"
+        card_b_path = edition_dir / card_b_filename
         insight_b_img = render_insight_card(
             insight_b_text_model,
             background_image=bg_b,
             scene_mode=story_b.get("scene_mode", "analyst"),
             accent_border=COLOR_ACCENT_APRICOT
         )
-        card_b_filename = f"episode-{ep_num}-03-insight-{slug_b}.png"
-        card_b_path = edition_dir / card_b_filename
         insight_b_img.save(card_b_path, format="PNG")
         generated_file_paths["insight_b"] = card_b_path
 
