@@ -29,6 +29,29 @@ from src.manifest_manager import (
 )
 
 
+def should_skip_completed_edition(manifest, edition_dir: Path, episode_number: int) -> tuple[bool, str]:
+    """Skip a completed edition only while its visual asset set remains valid.
+
+    A completed local run can be safely resumed when its four rendered cards
+    were removed or corrupted.  Reopening at ``audio_ready`` preserves the
+    researched news, scripts, and audio while allowing the visual stage to run.
+    """
+    if manifest.status not in ["delivered", "completed"]:
+        return False, "Edition is not complete."
+
+    is_valid, reason = validate_four_card_asset_set(
+        manifest.artifacts.get("visual_assets_manifest"),
+        edition_dir,
+        episode_number,
+    )
+    if is_valid:
+        return True, reason
+
+    print(f"[*] Completed edition has an invalid/incomplete visual asset set ({reason}). Resuming visual generation.")
+    update_manifest_stage(manifest, "audio_ready")
+    return False, reason
+
+
 def run_pipeline():
     """Run the complete end-to-end Frontier Pulse pipeline with atomic checkpoint resumes and idempotent delivery."""
     print("=" * 65)
@@ -47,8 +70,12 @@ def run_pipeline():
         update_manifest_stage(manifest, "failed", error=err_msg)
         sys.exit(1)
 
-    # Idempotent skip: if already delivered, exit successfully
-    if manifest.status in ["delivered", "completed"]:
+    # Idempotent skip: completed editions stay resumable if their visual cards
+    # were removed or become invalid after a rendering-system update.
+    edition_dir = get_edition_dir(edition_date)
+    ep_num = get_episode_number(edition_date)
+    should_skip, _ = should_skip_completed_edition(manifest, edition_dir, ep_num)
+    if should_skip:
         print(f"\n[+] Edition {edition_date} already successfully processed/delivered. Skipping execution (idempotent).")
         print("=" * 65)
         sys.exit(0)

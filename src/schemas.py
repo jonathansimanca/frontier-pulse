@@ -147,7 +147,7 @@ class CoverCardText(BaseModel):
     format: str = Field(default="PODCAST SEMANAL DE IA", description="Supporting format label")
     headline: str = Field(description="Benefit-led main headline (max 8 words)")
     metadata: str = Field(description="Metadata line, e.g., 'Episodio 4 · 4 min'")
-    cta: str = Field(default="▶ Escuchar ahora", description="Call to action line")
+    cta: str = Field(default="Escuchar ahora", description="Call to action line")
 
 
 class InsightCardText(BaseModel):
@@ -162,13 +162,13 @@ class EditionContextCardText(BaseModel):
     label: str = Field(default="CONTEXTO DE LA EDICIÓN", description="Top label")
     title: str = Field(description="Context headline (max 8 words)")
     context_text: str = Field(description="Context or listening guidance (max 25 words)")
-    cta: str = Field(default="▶ Escucha el episodio completo", description="Call to action line")
+    cta: str = Field(default="Escucha el episodio completo", description="Call to action line")
     footer: str = Field(description="Footer line, e.g., 'FRONTIER PULSE · EPISODIO 4'")
 
 
 class RoundupCardText(BaseModel):
-    label: str = Field(default="RADAR DE CIERRE", description="Top radar label")
-    headline: str = Field(default="Más señales que debes tener en el radar", description="Fixed closing radar headline")
+    label: str = Field(default="", description="Deprecated legacy field; no longer rendered")
+    headline: str = Field(default="También esta semana", description="Concise heading for the remaining-news list")
     remaining_titles: List[str] = Field(default_factory=list, max_length=3, description="Up to 3 remaining story titles (<= 7 words each)")
     cta: str = Field(default="Escucha el episodio completo", description="Closing call to action")
     footer: str = Field(description="Footer line, e.g., 'FRONTIER PULSE · EPISODIO 4'")
@@ -187,5 +187,4 @@ class VisualAssetManifest(BaseModel):
     episode_number: int = Field(description="Sequential episode number")
     edition_date: Optional[str] = Field(None, description="Target edition date in YYYY-MM-DD format")
     assets: List[VisualAssetItem] = Field(min_length=4, max_length=4, description="List of exactly 4 visual assets")
-
 

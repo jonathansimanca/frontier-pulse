@@ -130,8 +130,7 @@ def test_render_context_card_fallback():
 def test_render_roundup_card_dimensions_and_mode():
     """Verify AR-04 Closing Radar Card renders to 1080x1350 RGB image."""
     roundup_data = RoundupCardText(
-        label="RADAR DE CIERRE",
-        headline="Más señales que debes tener en el radar",
+        headline="También esta semana",
         remaining_titles=[
             "Avances en chips neuronales",
             "Nuevas regulaciones de seguridad",
@@ -349,4 +348,3 @@ def test_renderers_enforce_contrast_validation_and_reject_invalid_colors():
     )
     with pytest.raises(ValueError, match="Contrast validation failed for 'roundup_story_rows'"):
         render_roundup_card(roundup_data, color_overrides={"row_title_fg": (36, 32, 29)})
-

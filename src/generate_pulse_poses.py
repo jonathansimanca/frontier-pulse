@@ -52,9 +52,6 @@ def create_pulse_base(
     body_box = [center_x - body_w // 2, body_center_y - body_h // 2, center_x + body_w // 2, body_center_y + body_h // 2]
     # Body base
     draw.rounded_rectangle(body_box, radius=70, fill=CHARCOAL_SHELL, outline=CHARCOAL_HIGHLIGHT, width=4)
-    # Subtle body belly highlight / seam
-    draw.arc([center_x - 90, body_center_y - 40, center_x + 90, body_center_y + 70], start=20, end=160, fill=TERRACOTTA_FIN, width=3)
-
     # 3. Compact Lower Base / Feet
     draw.rounded_rectangle([center_x - 100, body_center_y + 80, center_x - 30, body_center_y + 130], radius=20, fill=CHARCOAL_DARK, outline=CHARCOAL_HIGHLIGHT, width=2)
     draw.rounded_rectangle([center_x + 30, body_center_y + 80, center_x + 100, body_center_y + 130], radius=20, fill=CHARCOAL_DARK, outline=CHARCOAL_HIGHLIGHT, width=2)

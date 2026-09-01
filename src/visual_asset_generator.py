@@ -328,9 +328,11 @@ def render_cover_card(
     # 4. CTA Button (Ivory on Terracotta, 30 px bold)
     cta_y = meta_y + 48
     font_cta = get_font(FONT_SIZE_CTA, bold=True)
-    cta_text = cover_data.cta.strip()
+    # The bundled display font does not include a reliable play-glyph.  Keep
+    # the label textual and render the play icon as geometry below instead.
+    cta_text = cover_data.cta.lstrip("▶▷▸ ").strip()
     cta_bbox = draw.textbbox((0, 0), cta_text, font=font_cta)
-    cta_w = (cta_bbox[2] - cta_bbox[0]) + 48
+    cta_w = (cta_bbox[2] - cta_bbox[0]) + 104
     cta_h = 56
 
     cta_box = (SAFE_MARGIN_X + 30, cta_y, SAFE_MARGIN_X + 30 + cta_w, cta_y + cta_h)
@@ -341,7 +343,13 @@ def render_cover_card(
         fill=(cta_bg[0], cta_bg[1], cta_bg[2], 255),
         outline=None
     )
-    draw.text((SAFE_MARGIN_X + 54, cta_y + 11), cta_text, font=font_cta, fill=cta_fg)
+    icon_x = SAFE_MARGIN_X + 50
+    icon_y = cta_y + 19
+    draw.polygon(
+        [(icon_x, icon_y), (icon_x, icon_y + 20), (icon_x + 17, icon_y + 10)],
+        fill=cta_fg,
+    )
+    draw.text((SAFE_MARGIN_X + 80, cta_y + 11), cta_text, font=font_cta, fill=cta_fg)
 
     # Combine layers and apply tactile paper grain overlay
     combined = Image.alpha_composite(canvas, overlay)
@@ -548,12 +556,8 @@ def render_roundup_card(
     overrides = color_overrides or {}
     validate_roundup_card_contrast(**overrides)
 
-    label_fg = overrides.get("label_fg", COLOR_TEXT_IVORY)
-    label_bg = overrides.get("label_bg", COLOR_ACCENT_TERRACOTTA)
     headline_fg = overrides.get("headline_fg", COLOR_TEXT_IVORY)
     row_title_fg = overrides.get("row_title_fg", COLOR_TEXT_IVORY)
-    row_num_fg = overrides.get("row_num_fg", COLOR_TEXT_IVORY)
-    row_num_bg = overrides.get("row_num_bg", COLOR_ACCENT_TERRACOTTA)
     cta_fg = overrides.get("cta_fg", COLOR_TEXT_IVORY)
     cta_bg = overrides.get("cta_bg", COLOR_ACCENT_TERRACOTTA)
     footer_fg = overrides.get("footer_fg", COLOR_TEXT_SAND)
@@ -580,25 +584,11 @@ def render_roundup_card(
     overlay = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    # 1. Top Radar Label Badge
+    # 1. Concise section heading.  There is deliberately no redundant
+    # "Closing Radar" badge: the list itself is the visual signal.
     top_y = SAFE_MARGIN_Y + 10
-    font_badge = get_font(FONT_SIZE_LABEL, bold=True)
-    badge_label = roundup_data.label.upper()
-    badge_bbox = draw.textbbox((0, 0), badge_label, font=font_badge)
-    badge_w = (badge_bbox[2] - badge_bbox[0]) + 32
-    badge_h = 42
-
-    draw_rounded_card(
-        draw,
-        (SAFE_MARGIN_X, top_y, SAFE_MARGIN_X + badge_w, top_y + badge_h),
-        radius=12,
-        fill=(label_bg[0], label_bg[1], label_bg[2], 230),
-        outline=None
-    )
-    draw.text((SAFE_MARGIN_X + 16, top_y + 8), badge_label, font=font_badge, fill=label_fg)
-
     # 2. Main Headline (54 px bold)
-    title_y = top_y + badge_h + 24
+    title_y = top_y
     font_title = get_font(FONT_SIZE_ROUNDUP_HEADLINE, bold=True)
     title_lines = wrap_text(roundup_data.headline, font_title, CONTENT_WIDTH, draw)
     title_lh = int(FONT_SIZE_ROUNDUP_HEADLINE * HEADLINE_LINE_HEIGHT_RATIO)
@@ -606,32 +596,22 @@ def render_roundup_card(
         draw.text((SAFE_MARGIN_X, title_y), line, font=font_title, fill=headline_fg)
         title_y += title_lh
 
-    # 3. Clean Left Column: Remaining News Items (30 px body font size)
+    # 3. Clean Left Column: remaining news as simple bullet points.
     items_start_y = title_y + 35
     font_item = get_font(FONT_SIZE_BODY, bold=False)  # >= 30 px
-    font_num = get_font(22, bold=True)
 
     current_item_y = items_start_y
-    for idx, title in enumerate(roundup_data.remaining_titles, 1):
-        item_lines = wrap_text(title, font_item, left_column_width - 80, draw)
-        box_h = max(75, len(item_lines) * 38 + 26)
-        item_box = (SAFE_MARGIN_X, current_item_y, SAFE_MARGIN_X + left_column_width, current_item_y + box_h)
+    for title in roundup_data.remaining_titles:
+        item_lines = wrap_text(title, font_item, left_column_width - 40, draw)
+        bullet_box = [SAFE_MARGIN_X, current_item_y + 12, SAFE_MARGIN_X + 14, current_item_y + 26]
+        draw.ellipse(bullet_box, fill=COLOR_ACCENT_TERRACOTTA)
 
-        # Draw mini row container
-        draw_rounded_card(draw, item_box, radius=14, fill=COLOR_CARD_SURFACE_OPAQUE, outline=COLOR_CARD_BORDER_SUBTLE, width=1)
-
-        # Number circle badge
-        num_circle_box = [SAFE_MARGIN_X + 16, current_item_y + 16, SAFE_MARGIN_X + 50, current_item_y + 50]
-        draw.ellipse(num_circle_box, fill=row_num_bg)
-        draw.text((SAFE_MARGIN_X + 27, current_item_y + 20), str(idx), font=font_num, fill=row_num_fg)
-
-        # Title text lines
-        line_y = current_item_y + 18
+        line_y = current_item_y
         for l in item_lines:
-            draw.text((SAFE_MARGIN_X + 66, line_y), l, font=font_item, fill=row_title_fg)
+            draw.text((SAFE_MARGIN_X + 30, line_y), l, font=font_item, fill=row_title_fg)
             line_y += 38
 
-        current_item_y += box_h + 16
+        current_item_y += max(50, len(item_lines) * 38) + 20
 
     # 4. CTA Button (30 px bold)
     cta_y = max(current_item_y + 30, CANVAS_HEIGHT - SAFE_MARGIN_Y - 140)
@@ -957,12 +937,10 @@ def generate_visual_assets(
     # 5. Render AR-04 Closing Radar Card (news_roundup)
     # ==========================================================================
     roundup_info = plan["roundup"]
-    roundup_label = "RADAR DE CIERRE" if lang_code == "es" else "CLOSING RADAR"
-    roundup_headline = "Más señales que debes tener en el radar" if lang_code == "es" else "More signals to keep on your radar"
+    roundup_headline = "También esta semana" if lang_code == "es" else "Also this week"
     roundup_cta = "Escucha el episodio completo" if lang_code == "es" else "Listen to the full episode"
 
     roundup_text_model = RoundupCardText(
-        label=roundup_label,
         headline=roundup_headline,
         remaining_titles=roundup_info["remaining_titles"],
         cta=roundup_cta,
