@@ -104,7 +104,7 @@ Each asset must communicate one dominant idea. Multiple headlines of equal visua
 | Insight headline | 64 px, bold | 8 words; maximum 3 lines |
 | Supporting text | 30 px | Must fit without crowding or clipping |
 | Short label | 24 px | Brief label only |
-| Episode/duration metadata | 28 px | One line |
+| Release date/duration metadata | 28 px | One line |
 | CTA | 30 px, bold | One concise action |
 
 Additional requirements:
@@ -184,14 +184,14 @@ The renderer selects a pose from this library based on `scene_mode` and composit
 
 ## 8. Asset Set
 
-The system must generate exactly four ordered assets per edition.
+The system must generate exactly four ordered assets per edition. Editions are identified by their release date, not by a sequential episode number, so naming and card text stay correct even if earlier editions are lost from storage.
 
 | ID | File name | Manifest type | Purpose | Suggested screen time |
 |---|---|---|---|---:|
-| AR-01 | `episode-[n]-01-cover.png` | `cover` | Opening statement, podcast identification, duration, CTA | 3 seconds |
-| AR-02 | `episode-[n]-02-insight-[slug].png` | `news_insight` | Primary story and practical impact | 5 seconds |
-| AR-03 | `episode-[n]-03-insight-[slug].png` | `news_insight` | Secondary story and practical impact | 5 seconds |
-| AR-04 | `episode-[n]-04-news-roundup.png` | `news_roundup` | Remaining stories, closing visual, full-episode CTA | 8 seconds |
+| AR-01 | `edition-[YYYY-MM-DD]-01-cover.png` | `cover` | Opening statement, podcast identification, duration, CTA | 3 seconds |
+| AR-02 | `edition-[YYYY-MM-DD]-02-insight-[slug].png` | `news_insight` | Primary story and practical impact | 5 seconds |
+| AR-03 | `edition-[YYYY-MM-DD]-03-insight-[slug].png` | `news_insight` | Secondary story and practical impact | 5 seconds |
+| AR-04 | `edition-[YYYY-MM-DD]-04-news-roundup.png` | `news_roundup` | Remaining stories, closing visual, full-episode CTA | 8 seconds |
 
 ### 8.1 AR-01 — Cover
 
@@ -200,7 +200,7 @@ Required content:
 - `FRONTIER PULSE` brand identifier.
 - An unmistakable Spanish podcast format label, for example `PODCAST SEMANAL DE IA`.
 - Benefit-led cover headline.
-- Episode number and duration.
+- Release date and duration, for example `21 sep 2026 · 4 min`.
 - One CTA, for example `Escuchar ahora`.
 
 The scene must support the week's editorial thesis. It may feature Pulse, but the brand and headline remain dominant.
@@ -213,7 +213,7 @@ Required content:
 - Plain-language story headline.
 - One verified key fact.
 - A concise practical implication beginning with `POR QUÉ IMPORTA:`.
-- Episode footer.
+- Release-date footer, for example `FRONTIER PULSE · 21 SEP 2026`.
 
 AR-02 uses the highest-relevance story. AR-03 uses the next editorially relevant story. Both should select a scene mode appropriate to the news category and impact.
 
@@ -227,7 +227,7 @@ Required text content:
 - Fixed headline: `Más señales que debes tener en el radar`.
 - Up to three remaining story titles, each limited to 7 words.
 - CTA: `Escucha el episodio completo`.
-- Footer: `FRONTIER PULSE · EPISODIO [n]`.
+- Footer: `FRONTIER PULSE · [DD MMM YYYY]`, for example `FRONTIER PULSE · 21 SEP 2026`.
 
 Required composition:
 

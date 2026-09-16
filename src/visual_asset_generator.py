@@ -5,10 +5,9 @@ combining deterministic Pillow typography compositing, the Pulse character syste
 tactile textures, and AI-generated artwork backgrounds.
 """
 
-import os
-import re
 import json
 import base64
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -79,28 +78,27 @@ from src.editorial_planner import (
 )
 
 
-def get_episode_number(edition_date: Optional[str] = None) -> int:
-    """Resolve sequential episode number from env, date anchors, or disk folders."""
-    env_ep = os.getenv("EPISODE_NUMBER")
-    if env_ep and env_ep.strip().isdigit():
-        return int(env_ep.strip())
+SPANISH_MONTH_ABBREVIATIONS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+ENGLISH_MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-    known_editions = ["2026-08-05", "2026-08-12", "2026-08-18", "2026-08-24"]
-    if edition_date and edition_date in known_editions:
-        return known_editions.index(edition_date) + 1
 
-    editions_dir = OUTPUT_DIR / "editions"
-    if editions_dir.exists():
-        found = sorted([
-            p.name for p in editions_dir.iterdir()
-            if p.is_dir() and re.match(r"^\d{4}-\d{2}-\d{2}$", p.name)
-        ])
-        if edition_date and edition_date in found:
-            return found.index(edition_date) + 1
-        elif found:
-            return len(found) + 1
+def format_release_date(edition_date: str, language: str = "es") -> str:
+    """Format an edition date (YYYY-MM-DD) as a short release date for card text.
 
-    return 4
+    Editions are identified by release date rather than a sequential episode number, so
+    card text stays correct even if earlier editions are lost from storage.
+
+    Examples: ``'2026-09-21'`` -> ``'21 sep 2026'`` (es) or ``'Sep 21, 2026'`` (en).
+    """
+    dt = datetime.strptime(edition_date, "%Y-%m-%d")
+    if language.lower().startswith("en"):
+        return f"{ENGLISH_MONTH_ABBREVIATIONS[dt.month - 1]} {dt.day}, {dt.year}"
+    return f"{dt.day} {SPANISH_MONTH_ABBREVIATIONS[dt.month - 1]} {dt.year}"
+
+
+def edition_asset_filename(edition_date: str, suffix: str) -> str:
+    """Return the date-based visual asset filename, e.g. ``edition-2026-09-21-01-cover.png``."""
+    return f"edition-{edition_date}-{suffix}"
 
 
 def create_base_gradient_background(scene_mode: str = "neutral") -> Image.Image:
@@ -320,7 +318,7 @@ def render_cover_card(
     # Tactile accent gesture
     draw_terracotta_brush_stroke(draw, (SAFE_MARGIN_X + 30, text_y + 8), (SAFE_MARGIN_X + 260, text_y + 12), stroke_width=8, opacity=200)
 
-    # 3. Metadata Line (Episode & Duration)
+    # 3. Metadata Line (Release Date & Duration)
     meta_y = text_y + 28
     font_meta = get_font(FONT_SIZE_META, bold=False)
     draw.text((SAFE_MARGIN_X + 30, meta_y), cover_data.metadata, font=font_meta, fill=meta_fg)
@@ -363,9 +361,14 @@ def render_insight_card(
     background_image: Optional[Image.Image] = None,
     scene_mode: str = "analyst",
     accent_border: Tuple[int, int, int] = COLOR_ACCENT_TERRACOTTA,
-    color_overrides: Optional[Dict[str, Tuple[int, int, int]]] = None
+    color_overrides: Optional[Dict[str, Tuple[int, int, int]]] = None,
+    language: Optional[str] = None
 ) -> Image.Image:
-    """Deterministically render AR-02 / AR-03 News Insight Card on controlled reading surfaces."""
+    """Deterministically render AR-02 / AR-03 News Insight Card on controlled reading surfaces.
+
+    ``language`` selects the section label language; when omitted it is inferred from the
+    Spanish card labels.
+    """
     # 0. Preflight contrast validation
     overrides = color_overrides or {}
     validate_insight_card_contrast(**overrides)
@@ -457,7 +460,11 @@ def render_insight_card(
     draw_rounded_card(draw, fact_box, radius=20, fill=COLOR_CARD_SURFACE_OPAQUE, outline=COLOR_CARD_BORDER_SUBTLE, width=1)
     
     # Section Label (24 px bold Sand) - strictly English if not Spanish
-    is_spanish = ("es" in insight_data.footer.lower() or "episodio" in insight_data.footer.lower() or "semana" in insight_data.label.lower()) and "episode" not in insight_data.footer.lower()
+    if language:
+        is_spanish = not language.lower().startswith("en")
+    else:
+        label_lower = insight_data.label.lower()
+        is_spanish = any(marker in label_lower for marker in ("semana", "edición", "contexto"))
     fact_label_text = "HECHO CLAVE" if is_spanish else "KEY FACT"
     draw.text((SAFE_MARGIN_X + 30, fact_card_y + 20), fact_label_text, font=font_fact_label, fill=key_fact_label_fg)
     fact_text_y = fact_card_y + 55
@@ -525,7 +532,7 @@ def render_context_card(
 ) -> Image.Image:
     """Render AR-03 Fallback Context Card when fewer than 2 news items are present."""
     if why_it_matters is None:
-        if language.lower().startswith("en") or "episode" in context_data.footer.lower() or "context" in context_data.label.lower():
+        if language.lower().startswith("en"):
             why_it_matters = "WHY IT MATTERS: In-depth analysis and strategic context for engineering teams."
         else:
             why_it_matters = "POR QUÉ IMPORTA: Análisis y perspectiva para el equipo."
@@ -542,7 +549,8 @@ def render_context_card(
         background_image=background_image,
         scene_mode=scene_mode,
         accent_border=COLOR_ACCENT_APRICOT,
-        color_overrides=color_overrides
+        color_overrides=color_overrides,
+        language=language
     )
 
 
@@ -690,8 +698,7 @@ def generate_background_artwork(prompt: str) -> Optional[Image.Image]:
 
 def validate_four_card_asset_set(
     manifest_path_str: Optional[str],
-    edition_dir: Path,
-    expected_episode_number: int
+    edition_dir: Path
 ) -> Tuple[bool, str]:
     """Validate that a previously generated visual asset manifest and its 4 cards are fully complete and valid.
 
@@ -750,42 +757,40 @@ def validate_four_card_asset_set(
 def generate_visual_assets(
     news_data: dict,
     edition_date: str,
-    episode_number: Optional[int] = None,
     audio_duration_minutes: Optional[int] = 4,
     language: str = PODCAST_LANGUAGE_ES
 ) -> Tuple[VisualAssetManifest, dict]:
     """Generate all 4 visual assets (Cover + Insight Cards + Roundup + Manifest) for an edition.
 
-    Outputs:
-    - episode-[number]-01-cover.png
-    - episode-[number]-02-insight-[slug-a].png
-    - episode-[number]-03-insight-[slug-b].png (or context fallback)
-    - episode-[number]-04-news-roundup.png
-    - episode-[number]-assets.json
+    Outputs (identified by release date, not by a sequential episode number):
+    - edition-[YYYY-MM-DD]-01-cover.png
+    - edition-[YYYY-MM-DD]-02-insight-[slug-a].png
+    - edition-[YYYY-MM-DD]-03-insight-[slug-b].png (or context fallback)
+    - edition-[YYYY-MM-DD]-04-news-roundup.png
+    - edition-[YYYY-MM-DD]-assets.json
     - podcast_cover.jpg (for backward compatibility with Telegram publisher)
     """
     edition_dir = get_edition_dir(edition_date)
-    ep_num = episode_number or get_episode_number(edition_date)
     dur_min = audio_duration_minutes or 4
     lang_code = "es" if "es" in language.lower() else "en"
+    release_date = format_release_date(edition_date, lang_code)
 
     # 1. Formulate 4-card editorial plan
     plan = plan_editorial_cards(
         news_data=news_data,
-        episode_number=ep_num,
         duration_minutes=dur_min,
         language=lang_code
     )
 
     manifest_assets: List[VisualAssetItem] = []
     generated_file_paths: dict = {}
-    footer_text = f"FRONTIER PULSE · EPISODIO {ep_num}" if lang_code == "es" else f"FRONTIER PULSE · EPISODE {ep_num}"
+    footer_text = f"FRONTIER PULSE · {release_date.upper()}"
 
     # ==========================================================================
     # 2. Render AR-01 Cover Card
     # ==========================================================================
     cover_info = plan["cover"]
-    cover_meta = f"Episodio {ep_num} · {dur_min} min" if lang_code == "es" else f"Episode {ep_num} · {dur_min} min"
+    cover_meta = f"{release_date} · {dur_min} min"
     cover_cta = "▶ Escuchar ahora" if lang_code == "es" else "▶ Listen now"
     cover_format = "PODCAST SEMANAL DE IA" if lang_code == "es" else "WEEKLY AI PODCAST"
 
@@ -801,7 +806,7 @@ def generate_visual_assets(
     bg_cover = generate_background_artwork(prompt_cover)
     cover_img = render_cover_card(cover_text_model, background_image=bg_cover, scene_mode=cover_info.get("scene_mode", "neutral"))
 
-    cover_filename = f"episode-{ep_num}-01-cover.png"
+    cover_filename = edition_asset_filename(edition_date, "01-cover.png")
     cover_path = edition_dir / cover_filename
     cover_img.save(cover_path, format="PNG")
     generated_file_paths["cover"] = cover_path
@@ -844,10 +849,11 @@ def generate_visual_assets(
         insight_a_text_model,
         background_image=bg_a,
         scene_mode=story_a.get("scene_mode", "analyst"),
-        accent_border=COLOR_ACCENT_TERRACOTTA
+        accent_border=COLOR_ACCENT_TERRACOTTA,
+        language=lang_code
     )
 
-    insight_a_filename = f"episode-{ep_num}-02-insight-{slug_a}.png"
+    insight_a_filename = edition_asset_filename(edition_date, f"02-insight-{slug_a}.png")
     insight_a_path = edition_dir / insight_a_filename
     insight_a_img.save(insight_a_path, format="PNG")
     generated_file_paths["insight_a"] = insight_a_path
@@ -881,7 +887,7 @@ def generate_visual_assets(
             cta="▶ Escucha el episodio completo" if lang_code == "es" else "▶ Listen to the full episode",
             footer=footer_text
         )
-        card_b_filename = f"episode-{ep_num}-03-insight-{slug_b}.png"
+        card_b_filename = edition_asset_filename(edition_date, f"03-insight-{slug_b}.png")
         card_b_path = edition_dir / card_b_filename
         insight_b_img = render_context_card(
             context_text_model,
@@ -911,13 +917,14 @@ def generate_visual_assets(
             why_it_matters=story_b["why_it_matters"],
             footer=footer_text
         )
-        card_b_filename = f"episode-{ep_num}-03-insight-{slug_b}.png"
+        card_b_filename = edition_asset_filename(edition_date, f"03-insight-{slug_b}.png")
         card_b_path = edition_dir / card_b_filename
         insight_b_img = render_insight_card(
             insight_b_text_model,
             background_image=bg_b,
             scene_mode=story_b.get("scene_mode", "analyst"),
-            accent_border=COLOR_ACCENT_APRICOT
+            accent_border=COLOR_ACCENT_APRICOT,
+            language=lang_code
         )
         insight_b_img.save(card_b_path, format="PNG")
         generated_file_paths["insight_b"] = card_b_path
@@ -951,7 +958,7 @@ def generate_visual_assets(
     bg_roundup = generate_background_artwork(prompt_roundup)
     roundup_img = render_roundup_card(roundup_text_model, background_image=bg_roundup)
 
-    roundup_filename = f"episode-{ep_num}-04-news-roundup.png"
+    roundup_filename = edition_asset_filename(edition_date, "04-news-roundup.png")
     roundup_path = edition_dir / roundup_filename
     roundup_img.save(roundup_path, format="PNG")
     generated_file_paths["roundup"] = roundup_path
@@ -970,12 +977,11 @@ def generate_visual_assets(
     # 6. Save Manifest JSON
     # ==========================================================================
     manifest = VisualAssetManifest(
-        episode_number=ep_num,
         edition_date=edition_date,
         assets=manifest_assets
     )
 
-    manifest_filename = f"episode-{ep_num}-assets.json"
+    manifest_filename = edition_asset_filename(edition_date, "assets.json")
     manifest_path = edition_dir / manifest_filename
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest.model_dump(mode="json"), f, indent=2, ensure_ascii=False)

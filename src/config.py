@@ -83,19 +83,29 @@ PODCAST_FORMAT = "monologue"
 
 # Model Configuration (Gemini API models)
 GEMINI_RESEARCH_MODEL = os.getenv("GEMINI_RESEARCH_MODEL", "gemini-3.7-flash")
+# HTTP verification of source links for selected stories and flagged priority candidates.
+LINK_CHECK_ENABLED = os.getenv("LINK_CHECK_ENABLED", "true").lower() in ("true", "1", "yes")
+LINK_CHECK_TIMEOUT_SECONDS = float(os.getenv("LINK_CHECK_TIMEOUT_SECONDS", "5"))
+LINK_CHECK_MAX_WORKERS = int(os.getenv("LINK_CHECK_MAX_WORKERS", "6"))
+# Single grounded fact-check of the selected stories after editorial selection.
+CLAIM_CHECK_ENABLED = os.getenv("CLAIM_CHECK_ENABLED", "true").lower() in ("true", "1", "yes")
+# Model used for discovery retries after the first attempt of a research track fails.
+GEMINI_RESEARCH_FALLBACK_MODEL = os.getenv("GEMINI_RESEARCH_FALLBACK_MODEL", "gemini-3.6-flash")
 GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_DEFAULT_MODEL", "gemini-3.7-flash")
 MAX_API_RETRIES = 2
 
 # Research Tracks for Multi-Track Discovery
 RESEARCH_TRACKS = {
     # 1. Major Frontier Labs & Flagship Foundation Models
+    # Queries intentionally avoid pinning specific model versions (e.g. "o1 o3", "V3 R1"),
+    # which bias grounded search toward stale coverage as model generations move on.
     "frontier_labs": [
-        "Google Gemini DeepMind release announcement updates",
-        "OpenAI GPT o1 o3 reasoning model launch updates",
-        "Anthropic Claude release Sonnet Opus Haiku updates",
-        "DeepSeek AI model release reasoning V3 R1",
-        "xAI Grok release announcement supercluster",
-        "Mistral AI model release Le Chat updates",
+        "Google DeepMind Gemini new model announcement",
+        "OpenAI new model launch or major product announcement",
+        "Anthropic Claude new model launch or major product announcement",
+        "DeepSeek new model release announcement",
+        "xAI Grok new model release announcement",
+        "Mistral AI new model release announcement",
     ],
 
     # 2. Autonomous Agents, Coding Systems & Protocol Standards
@@ -130,13 +140,71 @@ RESEARCH_TRACKS = {
         "Frontier AI lab executive leadership restructuring acquisition valuation",
     ],
 
-    # 6. Evaluation Benchmarks, Safety, Security & Governance
+    # 6. Evaluation Benchmarks, Technical Safety, Security & Regulation
     "benchmarks_safety_and_policy": [
         "LMSYS Chatbot Arena LiveBench ARC-AGI benchmark leaderboard",
         "AI safety alignment reasoning jailbreak prompt injection defense",
         "AI regulation policy US AISI UK AISI EU AI Act compliance",
     ],
+
+    # 7. Frontier AI Safety Governance, Lab Coordination & Development Pace
+    # Covers developments that change the speed, safety, or oversight of frontier AI
+    # (coordinated lab actions, slowdowns, capability limits, risk thresholds,
+    # independent evaluations, and international agreements), which the product- and
+    # technique-oriented tracks above do not surface.
+    "frontier_safety_and_governance": [
+        "Anthropic OpenAI xAI Google DeepMind leaders joint statement on frontier AI safety or development pace",
+        "Frontier AI development slowdown pause halt moratorium or capability limits called for by AI labs",
+        "Coordinated safety commitments between frontier AI labs Anthropic OpenAI Google DeepMind xAI Meta",
+        "Frontier model risk thresholds catastrophic risk warning responsible scaling policy preparedness framework update",
+        "Independent third-party safety evaluations embedded external evaluators pre-deployment testing of frontier models",
+        "International AI safety agreement summit or governance coordination on frontier AI development",
+    ],
 }
+
+# Track-specific discovery focus injected into each discovery prompt.
+# Without it, every track inherits a product-launch framing (releases, benchmarks,
+# tooling) and statement- or commitment-type developments are ignored.
+DEFAULT_TRACK_DISCOVERY_FOCUS = (
+    "major official announcements, model releases, technical benchmarks, developer tooling, "
+    "or key industry and infrastructure developments"
+)
+
+TRACK_DISCOVERY_FOCUS = {
+    "frontier_labs": (
+        "new or updated flagship models, major product launches, and strategic moves by frontier AI labs"
+    ),
+    "agentic_and_dev": (
+        "autonomous agent systems, coding agents, agent protocols, and developer platforms with verified capabilities"
+    ),
+    "open_source_and_global": (
+        "open-weight model releases, global (non-US) frontier LLMs, and efficient or on-device inference"
+    ),
+    "multimodal_and_creative": (
+        "video, voice, music, vision-language, and world-model generation breakthroughs"
+    ),
+    "infrastructure_and_hardware": (
+        "AI chips, compute clusters, datacenter energy, and frontier-lab corporate or leadership changes"
+    ),
+    "benchmarks_safety_and_policy": (
+        "benchmark results, technical safety and security research, and AI regulation or compliance actions"
+    ),
+    "frontier_safety_and_governance": (
+        "developments that materially change the speed, safety, or oversight of frontier AI: "
+        "coordinated actions or joint statements by multiple frontier labs; calls for or decisions on a "
+        "slowdown, pause, halt, moratorium, or capability limits; new or changed frontier-model risk "
+        "thresholds, deployment thresholds, or catastrophic-risk warnings; independent or embedded external "
+        "safety evaluations; voluntary safety commitments; and international AI safety agreements or "
+        "government coordination. On-the-record public statements by frontier-lab CEOs, leading researchers, "
+        "governments, or recognized AI safety organizations count as substantive developments"
+    ),
+}
+
+# Discovery candidate limits
+MIN_CANDIDATES_PER_TRACK = 3
+MAX_CANDIDATES_PER_TRACK = 6
+# Must match DiscoveryEdition.items max_length in src/schemas.py.
+MAX_DISCOVERY_POOL_SIZE = 35
 
 # Clean consolidated priority topics
 PRIORITY_TOPICS = [
@@ -186,4 +254,21 @@ AUTHORITATIVE_DOMAINS = [
     "theinformation.com",
     "semianalysis.com",
     "siliconangle.com",
+    # Major general news outlets (used to verify safety/governance priority stories)
+    "bloomberg.com",
+    "ft.com",
+    "nytimes.com",
+    "wsj.com",
+    "axios.com",
+    "apnews.com",
+    "cnbc.com",
+    "theguardian.com",
+    "bbc.com",
+    "bbc.co.uk",
+    # Government bodies and AI safety institutes
+    "aisi.gov.uk",
+    "nist.gov",
+    "europa.eu",
+    "whitehouse.gov",
+    "frontiermodelforum.org",
 ]

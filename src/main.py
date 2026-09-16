@@ -11,7 +11,7 @@ from src.image_generator import generate_podcast_cover
 from src.visual_asset_generator import (
     generate_visual_assets,
     validate_four_card_asset_set,
-    get_episode_number,
+    edition_asset_filename,
 )
 from src.telegram_publisher import publish_to_telegram
 
@@ -29,7 +29,7 @@ from src.manifest_manager import (
 )
 
 
-def should_skip_completed_edition(manifest, edition_dir: Path, episode_number: int) -> tuple[bool, str]:
+def should_skip_completed_edition(manifest, edition_dir: Path) -> tuple[bool, str]:
     """Skip a completed edition only while its visual asset set remains valid.
 
     A completed local run can be safely resumed when its four rendered cards
@@ -42,7 +42,6 @@ def should_skip_completed_edition(manifest, edition_dir: Path, episode_number: i
     is_valid, reason = validate_four_card_asset_set(
         manifest.artifacts.get("visual_assets_manifest"),
         edition_dir,
-        episode_number,
     )
     if is_valid:
         return True, reason
@@ -73,8 +72,7 @@ def run_pipeline():
     # Idempotent skip: completed editions stay resumable if their visual cards
     # were removed or become invalid after a rendering-system update.
     edition_dir = get_edition_dir(edition_date)
-    ep_num = get_episode_number(edition_date)
-    should_skip, _ = should_skip_completed_edition(manifest, edition_dir, ep_num)
+    should_skip, _ = should_skip_completed_edition(manifest, edition_dir)
     if should_skip:
         print(f"\n[+] Edition {edition_date} already successfully processed/delivered. Skipping execution (idempotent).")
         print("=" * 65)
@@ -96,12 +94,14 @@ def run_pipeline():
             edition_dir = get_edition_dir(edition_date)
             news_file = edition_dir / "edition.json"
             candidates_file = edition_dir / "candidates.json"
+            research_audit_file = edition_dir / "research_audit.json"
             update_manifest_stage(
                 manifest,
                 "researched",
                 artifacts={
                     "news_file": str(news_file.resolve()),
                     "candidates_file": str(candidates_file.resolve()),
+                    "research_audit_file": str(research_audit_file.resolve()),
                 }
             )
 
@@ -176,18 +176,16 @@ def run_pipeline():
         print("\n--- STEP 3.5: Generating Visual Assets for Video & Cover ---")
         assets_manifest_str = manifest.artifacts.get("visual_assets_manifest")
         edition_dir = get_edition_dir(edition_date)
-        ep_num = get_episode_number(edition_date)
 
         is_valid_asset_set, validation_reason = validate_four_card_asset_set(
             assets_manifest_str,
             edition_dir,
-            ep_num
         )
 
         if is_valid_asset_set and manifest.last_successful_stage not in [None, "created", "researched", "scripted", "audio_ready"]:
             print(f"[+] Resuming: Visual asset set is fully valid ({validation_reason}): {assets_manifest_str}")
             cover_file_str = manifest.artifacts.get("cover_image")
-            cover_path = Path(cover_file_str) if cover_file_str else edition_dir / f"episode-{ep_num}-01-cover.png"
+            cover_path = Path(cover_file_str) if cover_file_str else edition_dir / edition_asset_filename(edition_date, "01-cover.png")
         else:
             if assets_manifest_str:
                 print(f"[*] Visual asset set invalid/incomplete ({validation_reason}). Triggering full regeneration...")
@@ -203,7 +201,6 @@ def run_pipeline():
                 v_manifest, file_paths = generate_visual_assets(
                     news_data=news_data,
                     edition_date=edition_date,
-                    episode_number=ep_num,
                     audio_duration_minutes=audio_dur
                 )
                 cover_path = file_paths.get("cover")

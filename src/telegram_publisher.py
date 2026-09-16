@@ -340,7 +340,7 @@ def publish_to_telegram(manifest: EditionManifest = None) -> bool:
             cards_to_send.append(Path(image_path_str))
         else:
             edition_dir = get_edition_dir(edition_date)
-            found_cards = sorted(list(edition_dir.glob("episode-*-*.png")))
+            found_cards = sorted(list(edition_dir.glob("edition-*.png")))
             if found_cards:
                 cards_to_send.extend(found_cards)
 

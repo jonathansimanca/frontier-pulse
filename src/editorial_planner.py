@@ -52,7 +52,7 @@ def map_category_to_scene_mode(category: Optional[str]) -> str:
     return "analyst"
 
 
-def build_fallback_plan(news_data: dict, episode_number: int, language: str = "es") -> dict:
+def build_fallback_plan(news_data: dict, language: str = "es") -> dict:
     """Build a deterministic, fully-populated 4-card editorial plan without LLM calls."""
     items = news_data.get("items", [])
     if not items:
@@ -184,7 +184,6 @@ def build_fallback_plan(news_data: dict, episode_number: int, language: str = "e
 
 def plan_editorial_cards(
     news_data: dict,
-    episode_number: int,
     duration_minutes: int = 4,
     language: str = "es"
 ) -> dict:
@@ -194,7 +193,7 @@ def plan_editorial_cards(
         raise ValueError("Cannot plan visual cards from empty news items.")
 
     is_spanish = "es" in language.lower()
-    fallback = build_fallback_plan(news_data, episode_number, language)
+    fallback = build_fallback_plan(news_data, language)
     why_prefix = "POR QUÉ IMPORTA:" if is_spanish else "WHY IT MATTERS:"
 
     try:

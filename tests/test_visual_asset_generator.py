@@ -2,6 +2,7 @@
 
 import pytest
 import json
+import re
 from PIL import Image
 from src.schemas import (
     CoverCardText,
@@ -23,10 +24,14 @@ from src.visual_asset_generator import (
     render_context_card,
     render_roundup_card,
     generate_visual_assets,
-    get_episode_number,
+    format_release_date,
+    edition_asset_filename,
     slugify,
     clamp_words,
 )
+
+
+_re_episode_number = re.compile(r"(?i)\bepisod(?:e|io)\s*\d+|episode-\d+")
 
 
 def test_canvas_dimensions_and_safe_margins():
@@ -58,7 +63,7 @@ def test_render_cover_card_dimensions_and_mode():
         series="FRONTIER PULSE",
         format="PODCAST SEMANAL DE IA",
         headline="3 avances de IA clave esta semana",
-        metadata="Episodio 4 · 4 min",
+        metadata="24 ago 2026 · 4 min",
         cta="▶ Escuchar ahora"
     )
 
@@ -74,7 +79,7 @@ def test_render_cover_card_with_background():
         series="FRONTIER PULSE",
         format="PODCAST SEMANAL DE IA",
         headline="Avances de IA de alto impacto",
-        metadata="Episodio 4 · 5 min",
+        metadata="24 ago 2026 · 5 min",
         cta="▶ Escuchar ahora"
     )
 
@@ -90,7 +95,7 @@ def test_render_insight_card_dimensions_and_mode_spanish():
         title="Los agentes empresariales se vuelven más autónomos",
         key_fact="OpenAI confirmó su modelo Astra capaz de resolver problemas matemáticos complejos.",
         why_it_matters="POR QUÉ IMPORTA: Acelera la automatización de flujos complejos en producción.",
-        footer="FRONTIER PULSE · EPISODIO 4"
+        footer="FRONTIER PULSE · 24 AGO 2026"
     )
 
     img = render_insight_card(insight_data, scene_mode="orchestrator")
@@ -105,7 +110,7 @@ def test_render_insight_card_english():
         title="Autonomous agents deployed at scale in enterprise",
         key_fact="Anthropic rolled out major enhancements to Claude Developer Platform.",
         why_it_matters="WHY IT MATTERS: Pushes the frontier of agentic AI engineering workflows.",
-        footer="FRONTIER PULSE · EPISODE 4"
+        footer="FRONTIER PULSE · AUG 24, 2026"
     )
 
     img = render_insight_card(insight_data, scene_mode="builder")
@@ -120,7 +125,7 @@ def test_render_context_card_fallback():
         title="Panorama y contexto estratégico semanal",
         context_text="Análisis integral de señales y avances en la frontera de inteligencia artificial.",
         cta="▶ Escucha el episodio completo",
-        footer="FRONTIER PULSE · EPISODIO 4"
+        footer="FRONTIER PULSE · 24 AGO 2026"
     )
     img = render_context_card(ctx_data, scene_mode="analyst")
     assert img.size == (1080, 1350)
@@ -137,7 +142,7 @@ def test_render_roundup_card_dimensions_and_mode():
             "Alianza de robótica abierta"
         ],
         cta="Escucha el episodio completo",
-        footer="FRONTIER PULSE · EPISODIO 4"
+        footer="FRONTIER PULSE · 24 AGO 2026"
     )
 
     img = render_roundup_card(roundup_data)
@@ -154,16 +159,12 @@ def test_slugify_and_clamp_words():
     assert clamp_words("short", 5) == "short"
 
 
-def test_get_episode_number(monkeypatch):
-    """Verify episode number resolution."""
-    monkeypatch.setenv("EPISODE_NUMBER", "42")
-    assert get_episode_number() == 42
-    monkeypatch.delenv("EPISODE_NUMBER")
-
-    assert get_episode_number("2026-08-05") == 1
-    assert get_episode_number("2026-08-12") == 2
-    assert get_episode_number("2026-08-18") == 3
-    assert get_episode_number("2026-08-24") == 4
+def test_format_release_date_and_asset_filenames():
+    """Editions are identified by release date, never by a sequential episode number."""
+    assert format_release_date("2026-09-21", "es") == "21 sep 2026"
+    assert format_release_date("2026-01-05", "es") == "5 ene 2026"
+    assert format_release_date("2026-09-21", "en") == "Sep 21, 2026"
+    assert edition_asset_filename("2026-09-21", "01-cover.png") == "edition-2026-09-21-01-cover.png"
 
 
 def test_generate_visual_assets_end_to_end(tmp_path, monkeypatch):
@@ -208,13 +209,12 @@ def test_generate_visual_assets_end_to_end(tmp_path, monkeypatch):
     manifest, file_paths = generate_visual_assets(
         news_data=sample_news,
         edition_date="2026-08-24",
-        episode_number=4,
         audio_duration_minutes=4,
         language="es"
     )
 
     # Verify manifest has exactly 4 assets
-    assert manifest.episode_number == 4
+    assert manifest.edition_date == "2026-08-24"
     assert len(manifest.assets) == 4
     assert manifest.assets[0].type == "cover"
     assert manifest.assets[1].type == "news_insight"
@@ -222,19 +222,19 @@ def test_generate_visual_assets_end_to_end(tmp_path, monkeypatch):
     assert manifest.assets[3].type == "news_roundup"
 
     # Verify files on disk
-    cover_file = tmp_path / "episode-4-01-cover.png"
+    cover_file = tmp_path / "edition-2026-08-24-01-cover.png"
     assert cover_file.exists()
     assert Image.open(cover_file).size == (1080, 1350)
 
-    insight_a_file = tmp_path / "episode-4-02-insight-primary-topic.png"
+    insight_a_file = tmp_path / "edition-2026-08-24-02-insight-primary-topic.png"
     assert insight_a_file.exists()
     assert Image.open(insight_a_file).size == (1080, 1350)
 
-    insight_b_file = tmp_path / "episode-4-03-insight-secondary-topic.png"
+    insight_b_file = tmp_path / "edition-2026-08-24-03-insight-secondary-topic.png"
     assert insight_b_file.exists()
     assert Image.open(insight_b_file).size == (1080, 1350)
 
-    roundup_file = tmp_path / "episode-4-04-news-roundup.png"
+    roundup_file = tmp_path / "edition-2026-08-24-04-news-roundup.png"
     assert roundup_file.exists()
     assert Image.open(roundup_file).size == (1080, 1350)
 
@@ -243,12 +243,21 @@ def test_generate_visual_assets_end_to_end(tmp_path, monkeypatch):
     assert jpg_file.exists()
 
     # Manifest file
-    manifest_file = tmp_path / "episode-4-assets.json"
+    manifest_file = tmp_path / "edition-2026-08-24-assets.json"
     assert manifest_file.exists()
     with open(manifest_file, "r", encoding="utf-8") as f:
         loaded_json = json.load(f)
-        assert loaded_json["episode_number"] == 4
+        assert loaded_json["edition_date"] == "2026-08-24"
+        assert "episode_number" not in loaded_json
         assert len(loaded_json["assets"]) == 4
+
+    # Card text carries the release date and never an episode number.
+    assert manifest.assets[0].text.metadata == "24 ago 2026 · 4 min"
+    for asset in manifest.assets[1:]:
+        assert asset.text.footer == "FRONTIER PULSE · 24 AGO 2026"
+    serialized = json.dumps(manifest.model_dump(mode="json"), ensure_ascii=False)
+    assert not _re_episode_number.search(serialized)
+    assert sorted(p.name for p in tmp_path.glob("episode-*")) == []
 
 
 def test_english_single_story_edition_context_card_has_no_spanish(tmp_path, monkeypatch):
@@ -276,7 +285,6 @@ def test_english_single_story_edition_context_card_has_no_spanish(tmp_path, monk
     manifest, file_paths = generate_visual_assets(
         news_data=single_story_news,
         edition_date="2026-08-24",
-        episode_number=4,
         audio_duration_minutes=4,
         language="en"
     )
@@ -286,11 +294,11 @@ def test_english_single_story_edition_context_card_has_no_spanish(tmp_path, monk
     assert context_card_asset.type == "edition_context"
 
     # Verify context text model fields contain NO Spanish words
-    spanish_indicators = ["POR QUÉ IMPORTA", "EDICIÓN", "EPISODIO", "ESCUCHAR", "SEMANAL", "HECHO CLAVE"]
+    spanish_indicators = ["POR QUÉ IMPORTA", "EDICIÓN", "EPISODIO", "ESCUCHAR", "SEMANAL", "HECHO CLAVE", "AGO"]
     text_data = context_card_asset.text
 
     assert "EDITION CONTEXT" in text_data.label
-    assert "EPISODE 4" in text_data.footer
+    assert text_data.footer == "FRONTIER PULSE · AUG 24, 2026"
     assert "Listen" in text_data.cta
 
     for spanish_word in spanish_indicators:
@@ -311,7 +319,7 @@ def test_renderers_enforce_contrast_validation_and_reject_invalid_colors():
         series="FRONTIER PULSE",
         format="WEEKLY AI PODCAST",
         headline="Valid Headline",
-        metadata="Episode 4 · 4 min",
+        metadata="Aug 24, 2026 · 4 min",
         cta="▶ Listen now"
     )
 
@@ -329,7 +337,7 @@ def test_renderers_enforce_contrast_validation_and_reject_invalid_colors():
         title="Autonomous Systems at Scale",
         key_fact="Key fact text here.",
         why_it_matters="WHY IT MATTERS: High impact significance.",
-        footer="FRONTIER PULSE · EPISODE 4"
+        footer="FRONTIER PULSE · AUG 24, 2026"
     )
     with pytest.raises(ValueError, match="Contrast validation failed for 'insight_key_fact_body'"):
         render_insight_card(insight_data, color_overrides={"key_fact_body_fg": (40, 36, 32)})
@@ -344,7 +352,7 @@ def test_renderers_enforce_contrast_validation_and_reject_invalid_colors():
         headline="Signals in AI",
         remaining_titles=["Item 1", "Item 2"],
         cta="Listen to full episode",
-        footer="FRONTIER PULSE · EPISODE 4"
+        footer="FRONTIER PULSE · AUG 24, 2026"
     )
     with pytest.raises(ValueError, match="Contrast validation failed for 'roundup_story_rows'"):
         render_roundup_card(roundup_data, color_overrides={"row_title_fg": (36, 32, 29)})

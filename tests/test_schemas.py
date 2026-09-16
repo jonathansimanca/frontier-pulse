@@ -174,11 +174,10 @@ def test_visual_asset_manifest_validation():
     )
 
     manifest_data = {
-        "episode_number": 4,
         "edition_date": "2026-08-24",
         "assets": [
             {
-                "file": "episode-4-01-cover.png",
+                "file": "edition-2026-08-24-01-cover.png",
                 "type": "cover",
                 "display_order": 1,
                 "suggested_screen_time_seconds": 3,
@@ -186,12 +185,12 @@ def test_visual_asset_manifest_validation():
                     "series": "FRONTIER PULSE",
                     "format": "PODCAST SEMANAL DE IA",
                     "headline": "3 avances de IA clave esta semana",
-                    "metadata": "Episodio 4 · 4 min",
+                    "metadata": "24 ago 2026 · 4 min",
                     "cta": "▶ Escuchar ahora"
                 }
             },
             {
-                "file": "episode-4-02-insight-enterprise-agents.png",
+                "file": "edition-2026-08-24-02-insight-enterprise-agents.png",
                 "type": "news_insight",
                 "display_order": 2,
                 "suggested_screen_time_seconds": 5,
@@ -200,12 +199,12 @@ def test_visual_asset_manifest_validation():
                     "title": "Los agentes empresariales se vuelven más autónomos",
                     "key_fact": "OpenAI confirmó su modelo Astra capaz de resolver problemas complejos.",
                     "why_it_matters": "POR QUÉ IMPORTA: Acelera la automatización en entornos de producción.",
-                    "footer": "FRONTIER PULSE · EPISODIO 4"
+                    "footer": "FRONTIER PULSE · 24 AGO 2026"
                 },
                 "source_reference": "https://openai.com/news"
             },
             {
-                "file": "episode-4-03-insight-model-efficiency.png",
+                "file": "edition-2026-08-24-03-insight-model-efficiency.png",
                 "type": "news_insight",
                 "display_order": 3,
                 "suggested_screen_time_seconds": 5,
@@ -214,12 +213,12 @@ def test_visual_asset_manifest_validation():
                     "title": "Modelos compactos superan benchmarks de razonamiento",
                     "key_fact": "Nuevas arquitecturas reducen 40% el costo de inferencia.",
                     "why_it_matters": "POR QUÉ IMPORTA: Democratiza el despliegue local de IA.",
-                    "footer": "FRONTIER PULSE · EPISODIO 4"
+                    "footer": "FRONTIER PULSE · 24 AGO 2026"
                 },
                 "source_reference": "https://anthropic.com"
             },
             {
-                "file": "episode-4-04-news-roundup.png",
+                "file": "edition-2026-08-24-04-news-roundup.png",
                 "type": "news_roundup",
                 "display_order": 4,
                 "suggested_screen_time_seconds": 8,
@@ -232,14 +231,14 @@ def test_visual_asset_manifest_validation():
                         "Alianza de robótica abierta"
                     ],
                     "cta": "Escucha el episodio completo",
-                    "footer": "FRONTIER PULSE · EPISODIO 4"
+                    "footer": "FRONTIER PULSE · 24 AGO 2026"
                 }
             }
         ]
     }
 
     manifest = VisualAssetManifest.model_validate(manifest_data)
-    assert manifest.episode_number == 4
+    assert manifest.edition_date == "2026-08-24"
     assert len(manifest.assets) == 4
     assert manifest.assets[0].type == "cover"
     assert manifest.assets[1].type == "news_insight"

@@ -143,7 +143,7 @@ NOTICIAS A INCLUIR:
 ESTILO Y TONO EDITORIAL:
 - Redacta un guion de noticias de tecnología en un estilo rápido, analítico y conversacional.
 - Comienza con un gancho de apertura contundente que presente el anuncio o desarrollo como algo sorprendente, estratégicamente decisivo o parte de una carrera tecnológica global.
-- Explica las noticias con claridad y respalda el análisis con datos concretos: fechas específicas, benchmarks, porcentajes, precios y comparaciones técnicas.
+- Explica las noticias con claridad y respalda el análisis con los datos concretos que traen las noticias: fechas específicas, benchmarks, porcentajes, precios y comparaciones técnicas.
 - Dirígete directamente a la audiencia con preguntas retóricas, oraciones concisas y transiciones fluidas.
 - Ve más allá de repetir los hechos: explica lo que cada anuncio significa para las empresas involucradas, sus competidores, la comunidad de desarrolladores y el mercado tecnológico en general.
 - Mantén un tono seguro pero equilibrado. Destaca tanto fortalezas como debilidades o limitaciones, evita afirmaciones exageradas y distingue con claridad entre hechos verificados e interpretaciones.
@@ -158,6 +158,11 @@ ESTRUCTURA DE ORGANIZACIÓN DEL GUION:
 5. Implicaciones comerciales y estratégicas (Business and strategic implications)
 6. Tendencia más amplia de la industria (Broader industry trend)
 7. Conclusión concisa y pregunta de reflexión para la audiencia (Concise conclusion and question for the audience)
+
+REGLAS DE PRECISIÓN FACTUAL:
+- Usa únicamente los hechos incluidos en las noticias de arriba. No agregues personas, respaldos, compromisos, citas, cifras, fechas ni benchmarks que no aparezcan en ellas.
+- Atribuye cada declaración o compromiso a quien lo hizo según la noticia (por ejemplo, "según Anthropic" o "de acuerdo con Reuters"). Nunca extiendas la postura de una persona o empresa a otras.
+- Las comparaciones con competidores, implicaciones y tendencias son análisis: preséntalas como interpretación ("esto sugiere", "podría") y sin introducir datos nuevos.
 
 REGLAS FONÉTICAS Y DE TEXT-TO-SPEECH (TTS):
 - Mantén la extensión total entre 380 y 520 palabras para garantizar un ritmo ágil y dinámico (aproximadamente 3 a 4 minutos de locución).

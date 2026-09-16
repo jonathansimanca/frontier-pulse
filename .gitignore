@@ -25,6 +25,9 @@ credentials.json
 input/
 output/
 
+# Manually downloaded production artifacts and Cloud Logging exports (contain project identifiers)
+gcs_outputs/
+
 # Planning, research and improvement notebooks (Optional repository exclusions)
 IMPROVEMENT_PLAN.md
 

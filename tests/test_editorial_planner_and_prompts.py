@@ -82,7 +82,7 @@ def test_build_fallback_plan_with_multiple_items_spanish():
         ]
     }
 
-    plan = build_fallback_plan(sample_news, episode_number=4, language="es")
+    plan = build_fallback_plan(sample_news, language="es")
 
     assert "cover" in plan
     assert len(plan["cover"]["headline"].split()) <= MAX_WORDS_COVER_HEADLINE
@@ -124,7 +124,7 @@ def test_build_fallback_plan_english():
         ]
     }
 
-    plan = build_fallback_plan(sample_news, episode_number=4, language="en")
+    plan = build_fallback_plan(sample_news, language="en")
     assert plan["story_a"]["why_it_matters"].startswith("WHY IT MATTERS:")
     assert plan["story_b"]["is_fallback_context"] is True
     assert plan["story_b"]["why_it_matters"].startswith("WHY IT MATTERS:")

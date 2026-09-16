@@ -17,12 +17,12 @@ def create_dummy_png(path: Path, size=(CANVAS_WIDTH, CANVAS_HEIGHT)):
 
 def test_resume_validation_missing_manifest_path(tmp_path):
     """Resume validation should fail if manifest path is None or does not exist."""
-    is_valid, reason = validate_four_card_asset_set(None, tmp_path, 4)
+    is_valid, reason = validate_four_card_asset_set(None, tmp_path)
     assert not is_valid
     assert "No manifest path" in reason
 
     missing_path = tmp_path / "non_existent.json"
-    is_valid, reason = validate_four_card_asset_set(str(missing_path), tmp_path, 4)
+    is_valid, reason = validate_four_card_asset_set(str(missing_path), tmp_path)
     assert not is_valid
     assert "does not exist" in reason
 
@@ -30,11 +30,10 @@ def test_resume_validation_missing_manifest_path(tmp_path):
 def test_resume_validation_legacy_manifest_with_three_assets(tmp_path):
     """Resume validation should fail on legacy manifests with fewer than 4 assets."""
     manifest_data = {
-        "episode_number": 4,
-        "edition_date": "2026-08-18",
+        "edition_date": "2026-08-24",
         "assets": [
             {
-                "file": "episode-4-01-cover.png",
+                "file": "edition-2026-08-24-01-cover.png",
                 "type": "cover",
                 "display_order": 1,
                 "suggested_screen_time_seconds": 3,
@@ -47,7 +46,7 @@ def test_resume_validation_legacy_manifest_with_three_assets(tmp_path):
                 }
             },
             {
-                "file": "episode-4-02-insight-story-a.png",
+                "file": "edition-2026-08-24-02-insight-story-a.png",
                 "type": "news_insight",
                 "display_order": 2,
                 "suggested_screen_time_seconds": 5,
@@ -60,7 +59,7 @@ def test_resume_validation_legacy_manifest_with_three_assets(tmp_path):
                 }
             },
             {
-                "file": "episode-4-03-insight-story-b.png",
+                "file": "edition-2026-08-24-03-insight-story-b.png",
                 "type": "news_insight",
                 "display_order": 3,
                 "suggested_screen_time_seconds": 5,
@@ -74,11 +73,11 @@ def test_resume_validation_legacy_manifest_with_three_assets(tmp_path):
             }
         ]
     }
-    manifest_file = tmp_path / "episode-4-assets.json"
+    manifest_file = tmp_path / "edition-2026-08-24-assets.json"
     with open(manifest_file, "w", encoding="utf-8") as f:
         json.dump(manifest_data, f)
 
-    is_valid, reason = validate_four_card_asset_set(str(manifest_file), tmp_path, 4)
+    is_valid, reason = validate_four_card_asset_set(str(manifest_file), tmp_path)
     assert not is_valid
     assert "Manifest validation error" in reason or "assets" in reason
 
@@ -86,10 +85,10 @@ def test_resume_validation_legacy_manifest_with_three_assets(tmp_path):
 def test_resume_validation_four_assets_with_one_missing_file(tmp_path):
     """Resume validation should fail if 1 of the 4 card image files is missing on disk."""
     files = [
-        "episode-4-01-cover.png",
-        "episode-4-02-insight-test-a.png",
-        "episode-4-03-insight-test-b.png",
-        "episode-4-04-news-roundup.png"
+        "edition-2026-08-24-01-cover.png",
+        "edition-2026-08-24-02-insight-test-a.png",
+        "edition-2026-08-24-03-insight-test-b.png",
+        "edition-2026-08-24-04-news-roundup.png"
     ]
 
     # Create only the first 3 files
@@ -97,8 +96,7 @@ def test_resume_validation_four_assets_with_one_missing_file(tmp_path):
         create_dummy_png(tmp_path / fname)
 
     manifest_data = {
-        "episode_number": 4,
-        "edition_date": "2026-08-18",
+        "edition_date": "2026-08-24",
         "assets": [
             {
                 "file": files[0],
@@ -130,22 +128,22 @@ def test_resume_validation_four_assets_with_one_missing_file(tmp_path):
             }
         ]
     }
-    manifest_file = tmp_path / "episode-4-assets.json"
+    manifest_file = tmp_path / "edition-2026-08-24-assets.json"
     with open(manifest_file, "w", encoding="utf-8") as f:
         json.dump(manifest_data, f)
 
-    is_valid, reason = validate_four_card_asset_set(str(manifest_file), tmp_path, 4)
+    is_valid, reason = validate_four_card_asset_set(str(manifest_file), tmp_path)
     assert not is_valid
-    assert "missing on disk" in reason or "episode-4-04-news-roundup.png" in reason
+    assert "missing on disk" in reason or "edition-2026-08-24-04-news-roundup.png" in reason
 
 
 def test_resume_validation_invalid_dimensions(tmp_path):
     """Resume validation should fail if an image has invalid dimensions."""
     files = [
-        "episode-4-01-cover.png",
-        "episode-4-02-insight-test-a.png",
-        "episode-4-03-insight-test-b.png",
-        "episode-4-04-news-roundup.png"
+        "edition-2026-08-24-01-cover.png",
+        "edition-2026-08-24-02-insight-test-a.png",
+        "edition-2026-08-24-03-insight-test-b.png",
+        "edition-2026-08-24-04-news-roundup.png"
     ]
     # Create files, with file 2 having wrong dimensions (800x800)
     create_dummy_png(tmp_path / files[0], (1080, 1350))
@@ -154,8 +152,7 @@ def test_resume_validation_invalid_dimensions(tmp_path):
     create_dummy_png(tmp_path / files[3], (1080, 1350))
 
     manifest_data = {
-        "episode_number": 4,
-        "edition_date": "2026-08-18",
+        "edition_date": "2026-08-24",
         "assets": [
             {
                 "file": files[0],
@@ -187,11 +184,11 @@ def test_resume_validation_invalid_dimensions(tmp_path):
             }
         ]
     }
-    manifest_file = tmp_path / "episode-4-assets.json"
+    manifest_file = tmp_path / "edition-2026-08-24-assets.json"
     with open(manifest_file, "w", encoding="utf-8") as f:
         json.dump(manifest_data, f)
 
-    is_valid, reason = validate_four_card_asset_set(str(manifest_file), tmp_path, 4)
+    is_valid, reason = validate_four_card_asset_set(str(manifest_file), tmp_path)
     assert not is_valid
     assert "invalid dimensions" in reason
 
@@ -199,17 +196,16 @@ def test_resume_validation_invalid_dimensions(tmp_path):
 def test_resume_validation_valid_complete_manifest(tmp_path):
     """Resume validation should succeed when all 4 files are valid 1080x1350 PNGs and orders are [1, 2, 3, 4]."""
     files = [
-        "episode-4-01-cover.png",
-        "episode-4-02-insight-test-a.png",
-        "episode-4-03-insight-test-b.png",
-        "episode-4-04-news-roundup.png"
+        "edition-2026-08-24-01-cover.png",
+        "edition-2026-08-24-02-insight-test-a.png",
+        "edition-2026-08-24-03-insight-test-b.png",
+        "edition-2026-08-24-04-news-roundup.png"
     ]
     for fname in files:
         create_dummy_png(tmp_path / fname, (1080, 1350))
 
     manifest_data = {
-        "episode_number": 4,
-        "edition_date": "2026-08-18",
+        "edition_date": "2026-08-24",
         "assets": [
             {
                 "file": files[0],
@@ -241,10 +237,39 @@ def test_resume_validation_valid_complete_manifest(tmp_path):
             }
         ]
     }
-    manifest_file = tmp_path / "episode-4-assets.json"
+    manifest_file = tmp_path / "edition-2026-08-24-assets.json"
     with open(manifest_file, "w", encoding="utf-8") as f:
         json.dump(manifest_data, f)
 
-    is_valid, reason = validate_four_card_asset_set(str(manifest_file), tmp_path, 4)
+    is_valid, reason = validate_four_card_asset_set(str(manifest_file), tmp_path)
     assert is_valid
     assert "Valid 4-card asset set" in reason
+
+
+def test_legacy_episode_numbered_asset_set_remains_valid(tmp_path):
+    """Editions rendered before date-based naming (episode-N files + episode_number field) still validate."""
+    filenames = [
+        "episode-4-01-cover.png",
+        "episode-4-02-insight-test-a.png",
+        "episode-4-03-insight-test-b.png",
+        "episode-4-04-news-roundup.png",
+    ]
+    for name in filenames:
+        Image.new("RGB", (1080, 1350)).save(tmp_path / name, format="PNG")
+
+    legacy_manifest = {
+        "episode_number": 4,
+        "edition_date": "2026-08-24",
+        "assets": [
+            {"file": filenames[0], "type": "cover", "display_order": 1, "text": {"headline": "H", "metadata": "Episodio 4 · 4 min"}},
+            {"file": filenames[1], "type": "news_insight", "display_order": 2, "text": {"title": "A", "key_fact": "F", "why_it_matters": "W", "footer": "FRONTIER PULSE · EPISODIO 4"}},
+            {"file": filenames[2], "type": "news_insight", "display_order": 3, "text": {"title": "B", "key_fact": "F", "why_it_matters": "W", "footer": "FRONTIER PULSE · EPISODIO 4"}},
+            {"file": filenames[3], "type": "news_roundup", "display_order": 4, "text": {"footer": "FRONTIER PULSE · EPISODIO 4"}},
+        ],
+    }
+    manifest_file = tmp_path / "episode-4-assets.json"
+    manifest_file.write_text(json.dumps(legacy_manifest), encoding="utf-8")
+
+    is_valid, reason = validate_four_card_asset_set(str(manifest_file), tmp_path)
+
+    assert is_valid is True, reason
