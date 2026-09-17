@@ -6,6 +6,9 @@ Gemini call verifies the selected stories and returns corrected text for any uns
 
 The check is deliberately conservative:
 - One call for the whole edition; no retries.
+- Corrections are applied only when the call was grounded in Google Search, and only for
+  claims that a found source contradicts, with that source URL as evidence. Claims the model
+  merely could not find are kept, because an unverifiable claim is not necessarily false.
 - Only ``title``, ``summary``, ``why_it_matters`` and ``key_takeaways`` may change. Ids, sources,
   scores, and the set of stories never change.
 - Any failure (API error, unparseable output, invalid correction, schema validation) keeps the
@@ -53,11 +56,12 @@ You are the FACT-CHECK EDITOR for the 'Frontier Pulse' podcast, edition {news_da
 Use Google Search to verify the factual claims in each story below against its cited sources and reputable reporting.
 
 RULES:
-1. Check names of people and organizations, who said, endorsed, or committed to what, numbers, dates, and product names.
-2. Correct or remove any claim you cannot verify. Never keep an endorsement, commitment, or quote attributed to a person or organization unless a source confirms that exact person or organization made it.
-3. Keep verified content and the story's subject. Do not add new facts beyond what you verified.
-4. Keep the original language and a similar length. key_takeaways must contain 1 to 5 items.
-5. If every claim in a story is supported, return verdict "supported" and omit its text fields.
+1. Search for each story. Check names of people and organizations, who said, endorsed, or committed to what, numbers, dates, and product names.
+2. Correct or remove a claim ONLY when a source you found contradicts it (for example, a person is reported as endorsing something that reputable reporting says they did not). For every removed or changed claim, give the URL of that contradicting source as evidence_url.
+3. Do NOT remove a claim just because you could not find it. If you cannot confirm or contradict a claim, keep it and do not mark the story as corrected.
+4. Keep verified content and the story's subject. Do not add new facts beyond what your sources report.
+5. Keep the original language and a similar length. key_takeaways must contain 1 to 5 items.
+6. If no claim in a story is contradicted, return verdict "supported" and omit its text fields.
 
 STORIES:
 {stories_json}
@@ -73,12 +77,33 @@ OUTPUT: return ONLY raw JSON inside ```json and ``` with this shape:
       "summary": "corrected summary (only when corrected)",
       "why_it_matters": "corrected text (only when corrected)",
       "key_takeaways": ["corrected takeaway (only when corrected)"],
-      "removed_claims": ["each unsupported claim you removed or changed"]
+      "removed_claims": [
+        {{"claim": "the contradicted claim you removed or changed", "evidence_url": "https://source-that-contradicts-it"}}
+      ]
     }}
   ]
 }}
 ```
 """.strip()
+
+
+def _valid_removed_claims(entry: dict) -> tuple[list[dict], str | None]:
+    """Return normalized removed claims, or an error when any claim lacks contradiction evidence."""
+    removed = entry.get("removed_claims")
+    if not isinstance(removed, list) or not removed:
+        return [], "Correction has no removed_claims with evidence."
+    normalized = []
+    for claim in removed[:MAX_REMOVED_CLAIMS]:
+        if not isinstance(claim, dict):
+            return [], "Each removed claim must be an object with 'claim' and 'evidence_url'."
+        text = claim.get("claim")
+        url = claim.get("evidence_url")
+        if not isinstance(text, str) or not text.strip():
+            return [], "A removed claim has no text."
+        if not isinstance(url, str) or not url.strip().lower().startswith(("http://", "https://")):
+            return [], "A removed claim has no valid evidence_url."
+        normalized.append({"claim": text.strip()[:MAX_CLAIM_CHARS], "evidence_url": url.strip()})
+    return normalized, None
 
 
 def _valid_correction(entry: dict) -> tuple[dict, str | None]:
@@ -107,7 +132,8 @@ def apply_claim_corrections(news_data: dict, payload: Any) -> tuple[dict, list[d
 
     Returns ``(edition, item_records, ignored_ids)``. Each item record has ``id``, ``verdict``
     (``supported``, ``corrected``, ``not_checked`` or ``invalid_correction``),
-    ``changed_fields``, ``removed_claims`` and ``note``.
+    ``changed_fields``, ``removed_claims`` (``{claim, evidence_url}`` objects) and ``note``.
+    A correction is applied only when every removed claim carries an evidence URL.
     """
     entries = payload.get("items", []) if isinstance(payload, dict) else []
     entries_by_id = {e.get("id"): e for e in entries if isinstance(e, dict) and e.get("id")}
@@ -122,13 +148,15 @@ def apply_claim_corrections(news_data: dict, payload: Any) -> tuple[dict, list[d
         new_item = dict(item)
 
         if entry is not None:
-            removed = entry.get("removed_claims") if isinstance(entry.get("removed_claims"), list) else []
-            record["removed_claims"] = [str(c)[:MAX_CLAIM_CHARS] for c in removed[:MAX_REMOVED_CLAIMS]]
             verdict = str(entry.get("verdict", "supported")).strip().lower()
             if verdict != "corrected":
                 record["verdict"] = "supported"
             else:
+                removed_claims, evidence_error = _valid_removed_claims(entry)
                 corrected, error = _valid_correction(entry)
+                error = evidence_error or error
+                if not error:
+                    record["removed_claims"] = removed_claims
                 if error:
                     record["verdict"] = "invalid_correction"
                     record["note"] = f"{error} Original text kept."
@@ -161,6 +189,9 @@ def verify_edition_claims(client: Any, news_data: dict, model: str, enabled: boo
         "grounded": None,
         "web_search_queries": [],
         "error": None,
+        "parse_strategy": None,
+        "parse_repairs": None,
+        "raw_response": None,
         "ignored_ids": [],
         "items": [],
     }
@@ -169,7 +200,7 @@ def verify_edition_claims(client: Any, news_data: dict, model: str, enabled: boo
         return news_data, record
 
     # Imported lazily: ia_news_researcher imports this module.
-    from src.ia_news_researcher import parse_json_from_response
+    from src.ia_news_researcher import parse_json_with_diagnostics
 
     started = time.monotonic()
     try:
@@ -184,7 +215,19 @@ def verify_edition_claims(client: Any, news_data: dict, model: str, enabled: boo
         queries, sources = extract_grounding_metadata(response)
         record["web_search_queries"] = queries
         record["grounded"] = bool(queries or sources)
-        payload = parse_json_from_response(response.text)
+        if not record["grounded"]:
+            record["raw_response"] = response.text
+            record["status"] = "unverified_no_search"
+            record["error"] = "Claim check returned no grounding metadata; no corrections applied."
+            record["items"] = [
+                {"id": item.get("id"), "verdict": "unverified_no_search", "changed_fields": [], "removed_claims": [], "note": None}
+                for item in news_data.get("items", [])
+            ]
+            return news_data, record
+        record["raw_response"] = response.text
+        payload, diagnostics = parse_json_with_diagnostics(response.text)
+        record["parse_strategy"] = diagnostics["strategy"]
+        record["parse_repairs"] = diagnostics["repairs"]
         corrected_edition, item_records, ignored_ids = apply_claim_corrections(news_data, payload)
         validated = Edition.model_validate(corrected_edition)
         record.update(status="success", items=item_records, ignored_ids=ignored_ids)
@@ -200,5 +243,5 @@ def verify_edition_claims(client: Any, news_data: dict, model: str, enabled: boo
     if record["status"] == "success":
         print(f"[+] Claim check completed: {len(corrected_ids)} story(ies) corrected {corrected_ids}.")
     else:
-        print(f"[!] Warning: Claim check failed; original story text kept. {record['error']}")
+        print(f"[!] Warning: Claim check did not verify the edition; original story text kept. {record['error']}")
     return result, record

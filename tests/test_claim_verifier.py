@@ -20,7 +20,7 @@ OVERSTATED_STORY = PROBE["tracks"]["frontier_safety_and_governance"]["items"][0]
 CORRECTED_SUMMARY = (
     "Anthropic CEO Dario Amodei published an essay proposing that frontier labs pace capability advances "
     "so safety evaluations can keep up, and committed Anthropic to embedded third-party evaluators. "
-    "OpenAI CEO Sam Altman publicly agreed with the proposal."
+    "OpenAI CEO Sam Altman and xAI's Elon Musk publicly agreed with the proposal."
 )
 
 
@@ -67,7 +67,8 @@ class _Client:
 # --- Prompt rules ---------------------------------------------------------------------
 
 
-def test_fixture_story_contains_the_unsupported_endorsements():
+def test_fixture_story_names_lab_leaders_whose_endorsements_need_checking():
+    # Musk's endorsement was later confirmed by CNBC, CNN and Quartz; Hassabis's was not found.
     assert "Demis Hassabis" in OVERSTATED_STORY["summary"]
     assert "Elon Musk" in OVERSTATED_STORY["summary"]
 
@@ -99,7 +100,9 @@ def test_claim_check_prompt_lists_every_story_with_sources():
     edition = _edition([OVERSTATED_STORY, _other_story()])
     prompt = build_claim_check_prompt(edition)
     assert "FACT-CHECK EDITOR" in prompt
-    assert "Never keep an endorsement, commitment, or quote attributed to a person or organization" in prompt
+    assert "Correct or remove a claim ONLY when a source you found contradicts it" in prompt
+    assert "Do NOT remove a claim just because you could not find it." in prompt
+    assert '"evidence_url"' in prompt
     for item in edition["items"]:
         assert f'"id": "{item["id"]}"' in prompt
         assert item["sources"][0]["url"] in prompt
@@ -115,7 +118,9 @@ def test_corrected_story_replaces_only_text_fields():
             "id": OVERSTATED_STORY["id"],
             "verdict": "corrected",
             "summary": CORRECTED_SUMMARY,
-            "removed_claims": ["Demis Hassabis endorsed the proposal", "Elon Musk endorsed the proposal"],
+            "removed_claims": [
+                {"claim": "Demis Hassabis endorsed the proposal", "evidence_url": "https://www.cnbc.com/2026/09/14/sam-altman-ai-slowdown-anthropic-amodei-musk.html"},
+            ],
         },
         {"id": "openai-agents-api", "verdict": "supported"},
         {"id": "unknown-story", "verdict": "corrected", "summary": "Should be ignored."},
@@ -125,7 +130,7 @@ def test_corrected_story_replaces_only_text_fields():
 
     corrected = result["items"][0]
     assert corrected["summary"] == CORRECTED_SUMMARY
-    assert "Hassabis" not in corrected["summary"] and "Musk" not in corrected["summary"]
+    assert "Hassabis" not in corrected["summary"]
     for field in ("id", "title", "why_it_matters", "key_takeaways", "sources", "relevance_score", "evidence_score", "selection_reason"):
         assert corrected[field] == edition["items"][0][field]
     assert result["items"][1] == edition["items"][1]
@@ -133,7 +138,8 @@ def test_corrected_story_replaces_only_text_fields():
 
     assert records == [
         {"id": OVERSTATED_STORY["id"], "verdict": "corrected", "changed_fields": ["summary"],
-         "removed_claims": ["Demis Hassabis endorsed the proposal", "Elon Musk endorsed the proposal"], "note": None},
+         "removed_claims": [{"claim": "Demis Hassabis endorsed the proposal",
+                             "evidence_url": "https://www.cnbc.com/2026/09/14/sam-altman-ai-slowdown-anthropic-amodei-musk.html"}], "note": None},
         {"id": "openai-agents-api", "verdict": "supported", "changed_fields": [], "removed_claims": [], "note": None},
     ]
     assert ignored == ["unknown-story"]
@@ -141,7 +147,8 @@ def test_corrected_story_replaces_only_text_fields():
 
 def test_invalid_correction_keeps_original_text():
     edition = _edition([OVERSTATED_STORY])
-    payload = {"items": [{"id": OVERSTATED_STORY["id"], "verdict": "corrected", "summary": "Fixed.", "key_takeaways": []}]}
+    payload = {"items": [{"id": OVERSTATED_STORY["id"], "verdict": "corrected", "summary": "Fixed.", "key_takeaways": [],
+                          "removed_claims": [{"claim": "x", "evidence_url": "https://example.com/e"}]}]}
 
     result, records, _ = apply_claim_corrections(edition, payload)
 
@@ -163,7 +170,8 @@ def test_story_missing_from_payload_is_not_checked():
 def test_verify_edition_claims_uses_one_grounded_call_and_returns_valid_edition():
     edition = _edition([OVERSTATED_STORY, _other_story()])
     client = _Client(lambda: _response({"items": [
-        {"id": OVERSTATED_STORY["id"], "verdict": "corrected", "summary": CORRECTED_SUMMARY, "removed_claims": ["Musk endorsed"]},
+        {"id": OVERSTATED_STORY["id"], "verdict": "corrected", "summary": CORRECTED_SUMMARY,
+         "removed_claims": [{"claim": "Hassabis endorsed", "evidence_url": "https://www.cnn.com/2026/09/14/ai-slowdown"}]},
     ]}))
 
     result, record = verify_edition_claims(client, edition, "gemini-test")
@@ -194,7 +202,8 @@ def test_verify_edition_claims_keeps_original_on_api_error():
 
 def test_verify_edition_claims_keeps_original_on_unparseable_output():
     edition = _edition([OVERSTATED_STORY])
-    client = _Client(lambda: SimpleNamespace(text="I checked everything, it looks fine.", candidates=[]))
+    grounded_metadata = SimpleNamespace(web_search_queries=["q"], grounding_chunks=[])
+    client = _Client(lambda: SimpleNamespace(text="I checked everything, it looks fine.", candidates=[SimpleNamespace(grounding_metadata=grounded_metadata)]))
 
     result, record = verify_edition_claims(client, edition, "gemini-test")
 
@@ -231,7 +240,7 @@ def test_research_pipeline_applies_claim_check_and_records_it(research_env):
         assert OVERSTATED_STORY["id"] in prompt
         return _response({"items": [
             {"id": OVERSTATED_STORY["id"], "verdict": "corrected", "summary": CORRECTED_SUMMARY,
-             "removed_claims": ["Demis Hassabis endorsed the proposal", "Elon Musk endorsed the proposal"]},
+             "removed_claims": [{"claim": "Demis Hassabis endorsed the proposal", "evidence_url": "https://www.cnbc.com/2026/09/14/ai-slowdown"}]},
             {"id": "openai-agents-api", "verdict": "supported"},
         ]})
 
@@ -251,7 +260,7 @@ def test_research_pipeline_applies_claim_check_and_records_it(research_env):
     corrected = next(i for i in claim_audit["items"] if i["id"] == OVERSTATED_STORY["id"])
     assert corrected["verdict"] == "corrected"
     assert corrected["changed_fields"] == ["summary"]
-    assert "Elon Musk endorsed the proposal" in corrected["removed_claims"]
+    assert corrected["removed_claims"] == [{"claim": "Demis Hassabis endorsed the proposal", "evidence_url": "https://www.cnbc.com/2026/09/14/ai-slowdown"}]
 
 
 def test_research_pipeline_continues_when_claim_check_fails(research_env):
@@ -272,3 +281,69 @@ def test_research_pipeline_continues_when_claim_check_fails(research_env):
     audit = json.loads((research_env.edition_dir("2026-09-14") / AUDIT_FILENAME).read_text(encoding="utf-8"))
     assert audit["status"] == "completed"
     assert audit["claim_check"]["status"] == "error"
+
+
+# --- Safeguards: grounding and contradiction evidence ---------------------------------
+
+
+def test_ungrounded_claim_check_applies_no_corrections():
+    """2026-09-15: the claim check returned 'supported' for every story without running a search."""
+    edition = _edition([OVERSTATED_STORY, _other_story()])
+    payload = {"items": [{"id": OVERSTATED_STORY["id"], "verdict": "corrected", "summary": CORRECTED_SUMMARY,
+                          "removed_claims": [{"claim": "Musk endorsed", "evidence_url": "https://example.com/e"}]}]}
+    client = _Client(lambda: _response(payload, queries=()))
+
+    result, record = verify_edition_claims(client, edition, "gemini-test")
+
+    assert result == edition
+    assert record["status"] == "unverified_no_search"
+    assert record["grounded"] is False
+    assert [r["verdict"] for r in record["items"]] == ["unverified_no_search", "unverified_no_search"]
+    assert all(r["changed_fields"] == [] for r in record["items"])
+
+
+def test_correction_without_evidence_is_rejected():
+    edition = _edition([OVERSTATED_STORY])
+    for removed in ([], ["Elon Musk endorsed the proposal"], [{"claim": "Elon Musk endorsed the proposal"}],
+                    [{"claim": "Elon Musk endorsed the proposal", "evidence_url": "not a url"}]):
+        payload = {"items": [{"id": OVERSTATED_STORY["id"], "verdict": "corrected", "summary": CORRECTED_SUMMARY, "removed_claims": removed}]}
+
+        result, records, _ = apply_claim_corrections(edition, payload)
+
+        assert result["items"][0]["summary"] == OVERSTATED_STORY["summary"], removed
+        assert records[0]["verdict"] == "invalid_correction"
+        assert records[0]["removed_claims"] == []
+        assert "evidence" in records[0]["note"] or "removed claim" in records[0]["note"]
+
+
+def test_true_claims_are_kept_when_the_checker_only_failed_to_find_them():
+    """Musk's endorsement was real (reported by CNBC, CNN, Quartz); 'not found' must not remove it."""
+    edition = _edition([OVERSTATED_STORY])
+    client = _Client(lambda: _response({"items": [{"id": OVERSTATED_STORY["id"], "verdict": "supported"}]}))
+
+    result, record = verify_edition_claims(client, edition, "gemini-test")
+
+    assert "Elon Musk" in result["items"][0]["summary"]
+    assert record["items"][0]["verdict"] == "supported"
+
+
+def test_claim_check_repairs_corrupted_json_and_records_parse_diagnostics():
+    edition = _edition([OVERSTATED_STORY])
+    raw = (
+        '```json\n{\n  "items": [\n    {\n      "id": "' + OVERSTATED_STORY["id"] + '",\n'
+        '      "verdict": "corrected",\n'
+        '      "key_takeaways":.",\n'
+        '        "Amodei proposed pacing frontier AI development."\n'
+        '      ],\n'
+        '      "removed_claims": [{"claim": "Hassabis endorsed", "evidence_url": "https://www.cnbc.com/2026/09/14/ai-slowdown"}]\n'
+        '    }\n  ]\n}\n```'
+    )
+    metadata = SimpleNamespace(web_search_queries=["q"], grounding_chunks=[])
+    client = _Client(lambda: SimpleNamespace(text=raw, candidates=[SimpleNamespace(grounding_metadata=metadata)]))
+
+    result, record = verify_edition_claims(client, edition, "gemini-test")
+
+    assert result["items"][0]["key_takeaways"] == ["Amodei proposed pacing frontier AI development."]
+    assert record["status"] == "success"
+    assert (record["parse_strategy"], record["parse_repairs"]) == ("repaired", 1)
+    assert record["raw_response"] == raw

@@ -165,7 +165,10 @@ class ResearchAuditRecorder:
         error: str | None = None,
         web_search_queries: Iterable[str] = (),
         grounding_sources: Iterable[GroundingSourceAudit] = (),
+        raw_response: str | None = None,
+        parse_diagnostics: dict | None = None,
     ) -> None:
+        diagnostics = parse_diagnostics or {}
         queries = list(web_search_queries)
         sources = list(grounding_sources)
         self._track(track_key).attempts.append(
@@ -180,6 +183,11 @@ class ResearchAuditRecorder:
                 grounded=bool(queries or sources) if status == "success" else None,
                 web_search_queries=queries,
                 grounding_sources=sources,
+                parse_strategy=diagnostics.get("strategy"),
+                parse_repairs=diagnostics.get("repairs"),
+                raw_item_count=diagnostics.get("raw_item_count"),
+                parsed_item_count=diagnostics.get("parsed_item_count"),
+                raw_response=raw_response,
             )
         )
         self.save()

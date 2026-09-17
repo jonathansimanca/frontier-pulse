@@ -326,16 +326,16 @@ def test_audit_records_candidates_with_source_urls_and_rejection_reasons(complet
 def test_audit_records_pool_deduplication_and_selection(completed_audit):
     audit, news_data = completed_audit
 
-    assert audit["pool_accepted_count"] == 10
+    assert audit["pool_accepted_count"] == 12
     assert audit["deduplication"] == {
         "history_editions_loaded": 1,
-        "input_count": 10,
+        "input_count": 12,
         "removed_count": 1,
         "reverted_to_raw": False,
     }
 
     selection = audit["selection"]
-    assert selection["candidate_count"] == 9
+    assert selection["candidate_count"] == 11
     assert selection["fallback_used"] is False
     assert [(a["model"], a["status"]) for a in selection["attempts"]] == [(GEMINI_RESEARCH_MODEL, "success")]
     assert [c["candidate_id"] for c in selection["flagged_priority_candidates"]] == [SLOWDOWN_STORY["id"]]

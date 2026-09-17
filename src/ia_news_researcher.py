@@ -129,6 +129,31 @@ def format_human_date_window(edition_date: str) -> str:
     return f"{start_dt.strftime('%B %d, %Y')} to {dt.strftime('%B %d, %Y')}"
 
 
+MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+
+def format_search_period(start_date: str, end_date: str) -> str:
+    """Return the month/year period covered by a research window, for search queries.
+
+    Examples: ``September 2026``; ``August September 2026`` when the window spans two
+    months; ``December 2025 January 2026`` when it spans two years.
+    """
+    start = datetime.strptime(start_date[:10], "%Y-%m-%d")
+    end = datetime.strptime(end_date[:10], "%Y-%m-%d")
+    if (start.year, start.month) == (end.year, end.month):
+        return f"{MONTH_NAMES[end.month - 1]} {end.year}"
+    if start.year == end.year:
+        return f"{MONTH_NAMES[start.month - 1]} {MONTH_NAMES[end.month - 1]} {end.year}"
+    return f"{MONTH_NAMES[start.month - 1]} {start.year} {MONTH_NAMES[end.month - 1]} {end.year}"
+
+
+def scope_query_to_period(query: str, search_period: str) -> str:
+    """Append the search period to a query unless the query already names a year."""
+    if re.search(r"\b(19|20)\d{2}\b", query):
+        return query
+    return f"{query} {search_period}"
+
+
 def build_track_discovery_prompt(
     track_name: str,
     queries: list[str],
@@ -142,8 +167,12 @@ def build_track_discovery_prompt(
 
     The track focus comes from ``TRACK_DISCOVERY_FOCUS`` so that each track searches
     for its own kind of development instead of inheriting a product-launch framing.
+    Every target query is scoped to the coverage period (e.g. "September 2026") because
+    grounded search otherwise tends to hedge across earlier years.
     """
-    queries_str = "\n".join([f"- {q}" for q in queries])
+    search_period = format_search_period(start_date, end_date)
+    current_year = end_date[:4]
+    queries_str = "\n".join([f"- {scope_query_to_period(q, search_period)}" for q in queries])
     track_focus = TRACK_DISCOVERY_FOCUS.get(track_name, DEFAULT_TRACK_DISCOVERY_FOCUS)
     exclusion_text = ""
     if previous_topics:
@@ -153,10 +182,16 @@ def build_track_discovery_prompt(
 You are an expert AI technology researcher for the 'Frontier Pulse' podcast.
 We are discovering candidates for the research track: '{track_name.upper()}'.
 Edition Date: {edition_date}
+Current Year: {current_year}
 Coverage Window: {human_window} (strictly between {start_date} and {end_date}).
 
 TRACK FOCUS:
 {track_focus}.
+
+SEARCH INSTRUCTIONS:
+- Today is {edition_date}; the current year is {current_year}.
+- Run each TARGET SEARCH QUERY below as its own Google search, keeping its wording and its period ("{search_period}").
+- Limit every search, including any additional searches you choose to run, to {search_period}. Never add or search earlier years.
 
 TARGET SEARCH QUERIES TO INVESTIGATE:
 {queries_str}
@@ -304,36 +339,80 @@ YOUR EDITORIAL TASK:
     return prompt.strip()
 
 
-def parse_json_from_response(text: str) -> dict:
-    """Extract and parse JSON object from model response text with resilient repair."""
+# Grounded Gemini responses repeatedly emit a corrupted array opener such as
+#     "key_takeaways":.",
+#       "Second takeaway ...",
+# (the "[" and the first element are missing). Without repair the whole response fails to
+# parse and every affected item is silently dropped by the per-item fallback; on 2026-09-15
+# this removed the frontier-lab CEO slowdown story in 6 of 6 probe calls.
+CORRUPTED_ARRAY_OPENER = re.compile(r'("(?:key_takeaways|sources)"\s*:)[ \t]*(?![ \t]*[\[\n])[^\n]*\n')
+
+
+def repair_corrupted_array_openers(text: str) -> tuple[str, int]:
+    """Replace corrupted ``"key_takeaways":<garbage>`` / ``"sources":<garbage>`` openers with ``[``.
+
+    Only lines where the value does not start with ``[`` are touched. The element lost by the
+    model cannot be recovered, but the rest of the item becomes valid JSON again.
+
+    Returns ``(repaired_text, repair_count)``.
+    """
+    return CORRUPTED_ARRAY_OPENER.subn(r"\1 [\n", text)
+
+
+def parse_json_with_diagnostics(text: str) -> tuple[dict, dict]:
+    """Parse model JSON output and report how it was recovered.
+
+    Diagnostics keys: ``strategy`` (``direct``, ``repaired``, ``outer_object``,
+    ``item_fallback``), ``repairs`` (corrupted array openers fixed), ``raw_item_count``
+    (``"id":`` occurrences in the raw text) and ``parsed_item_count``.
+    """
     if not text:
         raise ValueError("Empty response text from model.")
 
     # 1. Strip markdown code fences
     cleaned = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.MULTILINE)
     cleaned = re.sub(r"\s*```$", "", cleaned, flags=re.MULTILINE).strip()
+    repaired, repairs = repair_corrupted_array_openers(cleaned)
+    diagnostics = {
+        "strategy": None,
+        "repairs": repairs,
+        "raw_item_count": len(re.findall(r'"id"\s*:', cleaned)),
+        "parsed_item_count": 0,
+    }
+
+    def done(result: dict, strategy: str) -> tuple[dict, dict]:
+        diagnostics["strategy"] = strategy
+        items = result.get("items") if isinstance(result, dict) else None
+        diagnostics["parsed_item_count"] = len(items) if isinstance(items, list) else 0
+        return result, diagnostics
 
     try:
-        return json.loads(cleaned)
+        return done(json.loads(cleaned), "direct")
     except json.JSONDecodeError:
         pass
 
+    if repairs:
+        try:
+            return done(json.loads(repaired), "repaired")
+        except json.JSONDecodeError:
+            pass
+
     # 2. Extract outer JSON object or array
-    match = re.search(r"(\{.*\}|\[.*\])", cleaned, re.DOTALL)
+    match = re.search(r"(\{.*\}|\[.*\])", repaired, re.DOTALL)
     if match:
         snippet = match.group(0)
         try:
-            return json.loads(snippet)
+            return done(json.loads(snippet), "outer_object")
         except json.JSONDecodeError:
             # Try cleaning trailing commas
             snippet_cleaned = re.sub(r",\s*([\]}])", r"\1", snippet)
             try:
-                return json.loads(snippet_cleaned)
+                return done(json.loads(snippet_cleaned), "outer_object")
             except json.JSONDecodeError:
                 pass
 
     # 3. Fallback: Extract individual item objects if array structure was truncated
-    items_matches = re.findall(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", cleaned, re.DOTALL)
+    items_matches = re.findall(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", repaired, re.DOTALL)
     items = []
     for item_str in items_matches:
         try:
@@ -344,9 +423,15 @@ def parse_json_from_response(text: str) -> dict:
         except Exception:
             continue
     if items:
-        return {"items": items}
+        return done({"items": items}, "item_fallback")
 
     raise ValueError(f"Failed to parse JSON response from Gemini research output. Snippet:\n{cleaned[:300]}")
+
+
+def parse_json_from_response(text: str) -> dict:
+    """Extract and parse JSON object from model response text with resilient repair."""
+    result, _ = parse_json_with_diagnostics(text)
+    return result
 
 
 def deterministic_deduplicate(
@@ -757,6 +842,8 @@ def _run_research(edition_date: str, start_date: str, end_date: str, audit: Rese
             attempt_clock = time.monotonic()
             search_queries: list[str] = []
             grounding_sources: list = []
+            raw_response: str | None = None
+            parse_diagnostics: dict = {}
             try:
                 track_response = client.models.generate_content(
                     model=curr_model,
@@ -767,7 +854,15 @@ def _run_research(edition_date: str, start_date: str, end_date: str, audit: Rese
                     )
                 )
                 search_queries, grounding_sources = extract_grounding_metadata(track_response)
-                parsed_track = parse_json_from_response(track_response.text)
+                raw_response = track_response.text
+                if raw_response:
+                    parse_diagnostics = {"raw_item_count": len(re.findall(r'"id"\s*:', raw_response))}
+                parsed_track, parse_diagnostics = parse_json_with_diagnostics(raw_response)
+                if parse_diagnostics["parsed_item_count"] < parse_diagnostics["raw_item_count"]:
+                    print(
+                        f"       [!] Track '{track_key}' parse kept {parse_diagnostics['parsed_item_count']} of "
+                        f"{parse_diagnostics['raw_item_count']} items (strategy: {parse_diagnostics['strategy']})."
+                    )
                 raw_track_items = list(parsed_track.get("items", []))
                 audit.record_track_candidates(track_key, raw_track_items)
                 source_events: list[dict] = []
@@ -775,6 +870,7 @@ def _run_research(edition_date: str, start_date: str, end_date: str, audit: Rese
                 audit.record_track_attempt(
                     track_key, attempt_idx, curr_model, temp, attempt_started_at, _elapsed_ms(attempt_clock),
                     status="success", web_search_queries=search_queries, grounding_sources=grounding_sources,
+                    raw_response=raw_response, parse_diagnostics=parse_diagnostics,
                 )
                 audit.apply_candidate_events(track_key, source_events)
                 prefix = f"({curr_model})" if curr_model != GEMINI_RESEARCH_MODEL else ""
@@ -793,6 +889,7 @@ def _run_research(edition_date: str, start_date: str, end_date: str, audit: Rese
                     track_key, attempt_idx, curr_model, temp, attempt_started_at, _elapsed_ms(attempt_clock),
                     status="error", error=f"{type(e).__name__}: {err_summary}",
                     web_search_queries=search_queries, grounding_sources=grounding_sources,
+                    raw_response=raw_response, parse_diagnostics=parse_diagnostics,
                 )
                 print(f"       [!] Track '{track_key}' attempt {attempt_idx}/{max_attempts} ({curr_model}) failed: {err_summary}")
                 # Exponential backoff on rate limits / quota exhaustion / temporary spikes

@@ -147,6 +147,11 @@ class ResearchAttemptAudit(BaseModel):
     )
     web_search_queries: List[str] = Field(default_factory=list, description="Searches actually executed by the model (grounding metadata)")
     grounding_sources: List[GroundingSourceAudit] = Field(default_factory=list, description="Web sources used by grounding")
+    parse_strategy: Optional[str] = Field(None, description="Enum: direct, repaired, outer_object, item_fallback")
+    parse_repairs: Optional[int] = Field(None, description="Corrupted JSON array openers repaired before parsing")
+    raw_item_count: Optional[int] = Field(None, description='Items in the raw response (count of "id" keys)')
+    parsed_item_count: Optional[int] = Field(None, description="Items recovered by the parser; lower than raw_item_count means items were lost")
+    raw_response: Optional[str] = Field(None, description="Raw model response text, kept to diagnose parse losses")
 
 
 class CandidateAudit(BaseModel):
@@ -214,22 +219,30 @@ class LinkCheckAudit(BaseModel):
     note: Optional[str] = None
 
 
+class RemovedClaimAudit(BaseModel):
+    claim: str
+    evidence_url: str = Field(description="Source URL that contradicts the removed claim")
+
+
 class ClaimCheckItemAudit(BaseModel):
     id: Optional[str] = None
-    verdict: str = Field(description="Enum: supported, corrected, not_checked, invalid_correction")
+    verdict: str = Field(description="Enum: supported, corrected, not_checked, invalid_correction, unverified_no_search")
     changed_fields: List[str] = Field(default_factory=list)
-    removed_claims: List[str] = Field(default_factory=list)
+    removed_claims: List[RemovedClaimAudit] = Field(default_factory=list)
     note: Optional[str] = None
 
 
 class ClaimCheckAudit(BaseModel):
-    status: str = Field(description="Enum: skipped, success, error")
+    status: str = Field(description="Enum: skipped, success, unverified_no_search, error")
     model: str
     started_at: datetime
     duration_ms: int = Field(ge=0)
     grounded: Optional[bool] = None
     web_search_queries: List[str] = Field(default_factory=list)
     error: Optional[str] = None
+    parse_strategy: Optional[str] = None
+    parse_repairs: Optional[int] = None
+    raw_response: Optional[str] = None
     ignored_ids: List[str] = Field(default_factory=list)
     items: List[ClaimCheckItemAudit] = Field(default_factory=list)
 

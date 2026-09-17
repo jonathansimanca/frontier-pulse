@@ -160,6 +160,20 @@ RESEARCH_TRACKS = {
         "Independent third-party safety evaluations embedded external evaluators pre-deployment testing of frontier models",
         "International AI safety agreement summit or governance coordination on frontier AI development",
     ],
+
+    # 8. Frontier Safety Headlines (second, independent pass over the safety track's scope)
+    # Short news-headline queries. Grounded search tends to rewrite the long descriptive
+    # queries above into generic searches; on 2026-09-15 that missed the widely reported
+    # call by frontier-lab CEOs to slow AI development. Overlap with track 7 is expected and
+    # handled by in-pool title dedup, the same-event selection rule, and the priority guard.
+    "frontier_safety_headlines": [
+        "AI CEOs call for AI slowdown",
+        "Altman Amodei Musk Hassabis AI warning",
+        "AI labs pause or slow AI development",
+        "AI stocks fall after AI safety warning",
+        "AI companies joint AI safety pledge",
+        "governments frontier AI safety agreement",
+    ],
 }
 
 # Track-specific discovery focus injected into each discovery prompt.
@@ -197,6 +211,12 @@ TRACK_DISCOVERY_FOCUS = {
         "safety evaluations; voluntary safety commitments; and international AI safety agreements or "
         "government coordination. On-the-record public statements by frontier-lab CEOs, leading researchers, "
         "governments, or recognized AI safety organizations count as substantive developments"
+    ),
+    "frontier_safety_headlines": (
+        "breaking news this period about the pace, safety, or oversight of frontier AI: frontier-lab CEOs or "
+        "leading researchers calling for a slowdown, pause, or limits; joint safety pledges or commitments by AI "
+        "companies; government agreements on frontier AI; and market or policy reactions to AI safety warnings. "
+        "Report the underlying development, not the market reaction alone"
     ),
 }
 

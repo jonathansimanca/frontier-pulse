@@ -20,7 +20,12 @@ from src.config import (
     RESEARCH_TRACKS,
     TRACK_DISCOVERY_FOCUS,
 )
-from src.ia_news_researcher import build_candidate_pool, build_track_discovery_prompt
+from src.ia_news_researcher import (
+    build_candidate_pool,
+    build_track_discovery_prompt,
+    format_search_period,
+    scope_query_to_period,
+)
 from src.schemas import DiscoveryEdition, NewsItem
 
 SAFETY_TRACK = "frontier_safety_and_governance"
@@ -236,3 +241,80 @@ def test_duplicate_titles_across_tracks_are_rejected_with_reason():
 def test_empty_track_results_produce_empty_pool():
     assert build_candidate_pool([]) == ([], [])
     assert build_candidate_pool([("frontier_labs", [])]) == ([], [])
+
+
+# --- Date-anchored searches -----------------------------------------------------------
+# The 2026-09-15 production audit showed the safety track searching
+# "September 2024 OR September 2025 OR September 2026": grounded search hedged across years.
+
+
+@pytest.mark.parametrize(
+    "start, end, expected",
+    [
+        ("2026-09-08T00:00:00-05:00", "2026-09-15T23:59:59-05:00", "September 2026"),
+        ("2026-08-28T00:00:00-05:00", "2026-09-04T23:59:59-05:00", "August September 2026"),
+        ("2025-12-29T00:00:00-05:00", "2026-01-05T23:59:59-05:00", "December 2025 January 2026"),
+    ],
+)
+def test_format_search_period(start, end, expected):
+    assert format_search_period(start, end) == expected
+
+
+def test_scope_query_to_period_does_not_duplicate_years():
+    assert scope_query_to_period("AI labs slowdown", "September 2026") == "AI labs slowdown September 2026"
+    assert scope_query_to_period("EU AI Act 2026 enforcement", "September 2026") == "EU AI Act 2026 enforcement"
+
+
+@pytest.mark.parametrize("track_key", sorted(RESEARCH_TRACKS))
+def test_every_target_query_is_scoped_to_the_coverage_period(track_key):
+    prompt = build_track_discovery_prompt(
+        track_key, RESEARCH_TRACKS[track_key], [], "2026-09-15",
+        "September 08, 2026 to September 15, 2026", "2026-09-08T00:00:00-05:00", "2026-09-15T23:59:59-05:00",
+    )
+    queries_block = prompt.split("TARGET SEARCH QUERIES TO INVESTIGATE:\n", 1)[1].split("\n\n", 1)[0]
+    lines = [line for line in queries_block.splitlines() if line.startswith("- ")]
+
+    assert len(lines) == len(RESEARCH_TRACKS[track_key])
+    for line, query in zip(lines, RESEARCH_TRACKS[track_key]):
+        assert line == f"- {scope_query_to_period(query, 'September 2026')}"
+        assert "2026" in line
+
+    assert "Current Year: 2026" in prompt
+    assert "Run each TARGET SEARCH QUERY below as its own Google search" in prompt
+    assert "Limit every search, including any additional searches you choose to run, to September 2026. Never add or search earlier years." in prompt
+    assert "2024" not in prompt and "2025" not in prompt
+
+
+# --- Second safety pass: headline-style queries ---------------------------------------
+# Long descriptive queries were rewritten by grounded search into generic searches on
+# 2026-09-15, missing the widely reported frontier-lab CEO slowdown call.
+
+HEADLINES_TRACK = "frontier_safety_headlines"
+
+
+def test_headline_safety_pass_is_configured_after_the_main_safety_track():
+    tracks = list(RESEARCH_TRACKS)
+    assert HEADLINES_TRACK in tracks
+    assert tracks.index(HEADLINES_TRACK) == tracks.index(SAFETY_TRACK) + 1
+
+
+def test_headline_queries_are_short_and_cover_the_event_vocabulary():
+    queries = RESEARCH_TRACKS[HEADLINES_TRACK]
+    assert len(queries) >= 5
+    assert all(len(q.split()) <= 9 for q in queries), queries
+    assert set(queries).isdisjoint(RESEARCH_TRACKS[SAFETY_TRACK])
+
+    text = " ".join(queries).lower()
+    for pattern in [r"\bslowdown\b|\bslow\b", r"\bpause\b", r"\bceos?\b", r"\bpledge\b|\bcommitments?\b",
+                    r"\bagreement\b", r"\bstocks?\b", r"\baltman\b", r"\bamodei\b", r"\bmusk\b", r"\bhassabis\b"]:
+        assert re.search(pattern, text), pattern
+
+
+def test_headline_pass_prompt_uses_its_own_focus_and_scoped_queries():
+    prompt = build_track_discovery_prompt(
+        HEADLINES_TRACK, RESEARCH_TRACKS[HEADLINES_TRACK], [], "2026-09-15",
+        "September 08, 2026 to September 15, 2026", "2026-09-08T00:00:00-05:00", "2026-09-15T23:59:59-05:00",
+    )
+    assert TRACK_DISCOVERY_FOCUS[HEADLINES_TRACK] in prompt
+    assert "- AI CEOs call for AI slowdown September 2026" in prompt
+    assert "Report the underlying development, not the market reaction alone" in prompt
