@@ -9,16 +9,18 @@ The system is deployed on Google Cloud Platform (Cloud Run Functions Gen 2 + Clo
 ## 🚀 Key Features
 
 1. **Multi-Track AI Web Research (Gemini Search Grounding):** Priority-driven, multi-track web discovery exploring key AI tracks concurrently:
-   - *Frontier Labs & Flagships:* Google DeepMind (Gemini, Project Astra), OpenAI, Anthropic (Claude), DeepSeek, Meta AI, xAI, Mistral.
-   - *Agentic Frameworks & Developer Tooling:* Coding agents, Computer Use, Model Context Protocol (MCP), APIs.
-   - *Hardware & Infrastructure:* AI acceleration (Nvidia, Cerebras, Groq, TPUs, Trainium), mega-datacenter energy, and lab restructuring.
-   - *Open Source & Open Weights:* Hugging Face, Alibaba Qwen / QwQ, Kimi, DeepSeek, and Meta Llama releases.
+   - *Frontier Labs & Flagships:* Google DeepMind (Gemini), OpenAI, Anthropic (Claude), DeepSeek, xAI, Mistral.
+   - *Agentic Frameworks & Developer Tooling:* Coding agents, Computer Use, Model Context Protocol (MCP), Agent-to-Agent (A2A), realtime APIs.
+   - *Open Source & Open Weights:* Meta Llama, Alibaba Qwen / QwQ, Kimi / GLM, Hugging Face trending releases, and efficient or on-device inference.
+   - *Multimodal & Creative Generation:* Video, voice, music, vision-language, and 3D or world-model generation.
+   - *Hardware & Infrastructure:* AI acceleration (Nvidia, Cerebras, Groq, TPUs, Trainium), mega-datacenter energy, and frontier-lab restructuring.
+   - *Benchmarks, Technical Safety & Policy:* Leaderboards (Chatbot Arena, LiveBench, ARC-AGI), alignment and jailbreak defense research, and AI regulation or compliance action.
    - *Frontier Safety & Governance:* Coordinated actions and joint statements by frontier labs, calls to slow down or pause frontier AI development, capability limits, risk thresholds, independent/embedded evaluators, and international safety agreements.
    - *Frontier Safety Headlines:* A second, independent pass over the same scope using short news-headline queries (e.g. CEOs calling for a slowdown, joint safety pledges, market reactions to safety warnings), because grounded search tends to generalize long descriptive queries.
 
    Every target query is scoped to the coverage period (e.g. `September 2026`), and the prompt states the current date and year so searches do not drift to earlier years.
 
-   Each track has its own discovery focus (`TRACK_DISCOVERY_FOCUS` in `src/config.py`). Candidates are validated one by one, and the discovery pool is capped fairly across tracks.
+   Each track has its own discovery focus (`TRACK_DISCOVERY_FOCUS` in `src/config.py`). Candidates are validated one by one, and the discovery pool is capped at 35 candidates (`MAX_DISCOVERY_POOL_SIZE`) using round-robin interleaving, so the cap never starves the tracks that run last.
 2. **Deterministic Deduplication & History Tracking:** Deduplicates candidates against historical editions using normalized source URLs and title similarity.
 3. **4-Tier Editorial Selection Rubric:** Ranks candidates into Tiers (Tier 1 flagship releases, breakthrough infrastructure, and multi-lab safety/governance developments; Tier 2 open weights, dev tools, safety-policy and regulatory changes, and funding/partnerships at most; Tier 3 minor patches; Tier 4 rejected spam and portfolios).
 4. **Multi-Lab Safety Priority Guard (`src/editorial_priority.py`):** A deterministic classifier flags candidates that name at least two frontier labs together with a specific safety/governance action (e.g. slowdown, pause, joint commitment, risk thresholds). Flagged candidates are highlighted to the editor model, and if one is still omitted, the guard appends at most one (only with an authoritative source, only when the edition has fewer than 5 stories, and never as a duplicate of an already selected flagged story).
@@ -27,10 +29,11 @@ The system is deployed on Google Cloud Platform (Cloud Run Functions Gen 2 + Clo
 7. **Research Audit Trail (`src/research_audit.py`):** Every run writes `output/editions/<date>/research_audit.json` with each track's queries, prompt, model attempts, grounding searches and sources, raw model responses with parse diagnostics (including repaired JSON and any items lost while parsing), and every candidate's final outcome and reason, so a missed story can be traced to discovery, filtering, or ranking.
 8. **Editorial Quality Gate (`src/quality_gate.py`):** Multi-rule verification checking domain trustworthiness, temporal window compliance, and publisher diversity.
 9. **Analytical Monologue Scripting & Phonetic Normalization (`src/script_generator.py`):** Produces a fast-paced, analytical 7-step monologue script (Opening hook, Main announcement, Technical details & benchmarks, Competitor comparisons, Strategic implications, Industry trends, and Concluding audience question) with phonetic text normalization for spoken Spanish.
-10. **Multi-Image Visual Asset Generation (`src/visual_asset_generator.py`):** Generates 2–3 portrait $1080 \times 1350\text{ px}$ (4:5) cards combining AI background artwork (`gemini-3.1-flash-image` / Imagen 3) with a deterministic Pillow compositing layer (safe margins $\ge 80\text{ px}$, scalable typography, dark translucent cards, and high-contrast badges) plus an `edition-[YYYY-MM-DD]-assets.json` manifest formatted for mobile video editing and LinkedIn carousels:
-   - **AR-01 Cover Card:** Headline $\le 10$ words, release date, audio duration, and call-to-action.
-   - **AR-02 Primary News Insight Card:** Plain-language title $\le 9$ words, key fact $\le 20$ words, and why it matters $\le 16$ words.
-   - **AR-03 Secondary News Insight Card (Optional):** Structured card for a distinct secondary story.
+10. **Multi-Image Visual Asset Generation (`src/visual_asset_generator.py`):** Generates exactly 4 portrait $1080 \times 1350\text{ px}$ (4:5) cards combining AI background artwork (`gemini-3.1-flash-image` / Imagen 3) with a deterministic Pillow compositing layer (safe margins $\ge 80\text{ px}$, scalable typography, dark translucent cards, high-contrast badges, and a contrast preflight that fails before rendering an unreadable pair) plus an `edition-[YYYY-MM-DD]-assets.json` manifest formatted for mobile video editing and LinkedIn carousels:
+   - **AR-01 Cover Card** (`cover`): Headline $\le 8$ words, release date, audio duration, and call-to-action.
+   - **AR-02 Primary News Insight Card** (`news_insight`): Plain-language title $\le 8$ words, key fact $\le 20$ words, and why it matters $\le 16$ words, for the highest-relevance story.
+   - **AR-03 Secondary News Insight Card** (`news_insight`): The same structure for the next editorially relevant story. When no verified secondary story exists, this slot renders an `edition_context` card using verified edition-level context or a neutral listening invitation instead.
+   - **AR-04 Closing Roundup Card** (`news_roundup`): Mandatory closing card listing up to 3 remaining story titles ($\le 7$ words each) with the full-episode call-to-action. It replaces reusing AR-01 as a closing frame.
 11. **High-Definition es-US Spoken Audio (Google Cloud Text-to-Speech):** Synthesizes Latin American Spanish audio using the HD voice (`es-US-Chirp-HD-O`) with sentence-boundary chunking for seamless long-form audio.
 12. **Dual Transcripts:** Automatically produces structured, clean written transcripts in both Latin American Spanish and English.
 13. **Idempotent Telegram Publisher with Media Group Album (`src/telegram_publisher.py`):** Delivers the formatted markdown bulletin, all generated visual cards as a swipeable photo album (media group), and the final `.mp3` episode to your Telegram chat/channel with atomic manifest checkpoints.
@@ -48,10 +51,11 @@ The system is deployed on Google Cloud Platform (Cloud Run Functions Gen 2 + Clo
   ```
 
 ### Installation
-1. Install project dependencies:
+1. Install project dependencies with `uv` (the dependency manager for local development, resolved from `pyproject.toml` and pinned by `uv.lock`):
    ```bash
-   pip3 install -r requirements.txt
+   uv sync
    ```
+   `requirements.txt` is kept for the Cloud Run Functions build, which installs from it at deploy time. Keep it in sync when project dependencies change.
 
 2. Configure environment variables (`.env`):
    Copy `.env.example` to `.env` and fill in your configuration:
@@ -71,12 +75,15 @@ The system is deployed on Google Cloud Platform (Cloud Run Functions Gen 2 + Clo
 ### Running Locally
 Run the entire end-to-end pipeline:
 ```bash
-python3 -m src.main
+uv run python -m src.main
 ```
 
-Run unit and integration tests:
+Run unit and integration tests (the `dev` extra provides `pytest` and is not installed by a plain `uv sync`):
 ```bash
-pytest -v
+uv sync --extra dev
+```
+```bash
+uv run pytest -v
 ```
 
 ---
